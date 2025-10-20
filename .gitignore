@@ -76,6 +76,7 @@ crashlytics-build.properties
 
 # Unity-generated Resources (often contains auto-generated settings)
 /Assets/Resources/
+/Assets/Resources.meta
 
 # Third-party Assets - TextMesh Pro (Unity package)
 /Assets/TextMesh Pro/
