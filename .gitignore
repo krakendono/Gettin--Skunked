@@ -74,6 +74,9 @@ crashlytics-build.properties
 /Assets/Photon/
 /Assets/Resources/PhotonServerSettings.asset*
 
+# Unity-generated Resources (often contains auto-generated settings)
+/Assets/Resources/
+
 # Third-party Assets - TextMesh Pro (Unity package)
 /Assets/TextMesh Pro/
 
