@@ -37,12 +37,16 @@ public class Axe : MonoBehaviour
     public LayerMask enemyLayers = 1; // What layers can be hit
     
     [Header("Effects")]
-    public ParticleSystem swingEffect;
+    public TrailRenderer swingTrail; // Trail effect for weapon swing
     public ParticleSystem hitEffect;
     public AudioClip primarySwingSound;
     public AudioClip secondarySwingSound;
     public AudioClip hitSound;
     public AudioClip blockSound;
+    
+    [Header("Trail Settings")]
+    public float trailDuration = 0.3f; // How long the trail lasts
+    public bool enableTrailOnlyDuringAttack = true; // If true, trail only shows during attacks
     
     [Header("Animation")]
     public Animator axeAnimator; // For axe animations
@@ -90,6 +94,9 @@ public class Axe : MonoBehaviour
             
         // Initialize stamina
         currentStamina = maxStamina;
+        
+        // Setup trail renderer
+        SetupTrailRenderer();
         
         // Set initial state
         SetState(AxeState.Idle);
@@ -191,11 +198,8 @@ public class Axe : MonoBehaviour
         AudioClip soundToPlay = attackType == AttackType.LeftClick ? primarySwingSound : secondarySwingSound;
         PlaySound(soundToPlay);
         
-        // Play swing effect
-        if (swingEffect != null)
-        {
-            swingEffect.Play();
-        }
+        // Start swing trail effect
+        StartSwingTrail();
         
         if (enableDebugLogs)
         {
@@ -217,6 +221,7 @@ public class Axe : MonoBehaviour
         // End attack when duration is complete
         if (stateTimer >= attackDuration)
         {
+            StopSwingTrail();
             SetState(AxeState.Cooldown);
         }
     }
@@ -348,6 +353,78 @@ public class Axe : MonoBehaviour
         if (clip != null && audioSource != null)
         {
             audioSource.PlayOneShot(clip);
+        }
+    }
+    
+    void StartSwingTrail()
+    {
+        if (swingTrail != null)
+        {
+            // Enable the trail renderer
+            swingTrail.enabled = true;
+            
+            // Clear any existing trail
+            swingTrail.Clear();
+            
+            // Set trail time
+            swingTrail.time = trailDuration;
+            
+            if (enableDebugLogs)
+            {
+                Debug.Log("Started swing trail effect");
+            }
+        }
+    }
+    
+    void StopSwingTrail()
+    {
+        if (swingTrail != null && enableTrailOnlyDuringAttack)
+        {
+            // Start coroutine to fade out trail instead of instantly disabling
+            StartCoroutine(FadeOutTrail());
+        }
+    }
+    
+    IEnumerator FadeOutTrail()
+    {
+        if (swingTrail == null) yield break;
+        
+        // Wait for the trail to naturally fade based on its time setting
+        yield return new WaitForSeconds(swingTrail.time);
+        
+        // Disable trail renderer to stop it from rendering
+        if (enableTrailOnlyDuringAttack)
+        {
+            swingTrail.enabled = false;
+        }
+        
+        if (enableDebugLogs)
+        {
+            Debug.Log("Stopped swing trail effect");
+        }
+    }
+    
+    void SetupTrailRenderer()
+    {
+        if (swingTrail != null)
+        {
+            // Configure trail settings
+            swingTrail.time = trailDuration;
+            
+            // Disable trail initially if set to only show during attacks
+            if (enableTrailOnlyDuringAttack)
+            {
+                swingTrail.enabled = false;
+            }
+            
+            if (enableDebugLogs)
+            {
+                Debug.Log("Trail renderer setup complete");
+            }
+        }
+        else if (enableDebugLogs)
+        {
+            Debug.LogWarning("No TrailRenderer assigned to Axe script! Please assign a TrailRenderer in the inspector for swing effects.");
         }
     }
     
