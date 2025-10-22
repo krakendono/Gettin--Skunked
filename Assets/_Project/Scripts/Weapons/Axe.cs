@@ -32,6 +32,10 @@ public class Axe : MonoBehaviour
     public float attackCooldown = 0.3f;
     public float blockDuration = 2.0f; // How long block lasts if held
     
+    [Header("Stamina Costs")]
+    public float primaryAttackStaminaCost = 15f; // Stamina cost for left click attack
+    public float secondaryAttackStaminaCost = 25f; // Stamina cost for right click attack
+    
     [Header("Attack Points")]
     public Transform attackPoint; // Point from which attack originates
     public LayerMask enemyLayers = 1; // What layers can be hit
@@ -57,7 +61,7 @@ public class Axe : MonoBehaviour
     
     [Header("Blocking")]
     public float blockDamageReduction = 0.8f; // 80% damage reduction when blocking
-    public float blockStaminaCost = 10f;
+    public float blockStaminaCost = 10f; // Stamina drain per second while blocking
     public float maxStamina = 100f;
     public float staminaRegenRate = 20f; // Per second
     
@@ -118,7 +122,7 @@ public class Axe : MonoBehaviour
         // Primary attack (Left Click)
         if (Input.GetMouseButtonDown(0))
         {
-            if (currentState == AxeState.Idle)
+            if (currentState == AxeState.Idle && currentStamina >= primaryAttackStaminaCost)
             {
                 StartAttack(AttackType.LeftClick);
             }
@@ -127,7 +131,7 @@ public class Axe : MonoBehaviour
         // Secondary attack (Right Click)
         if (Input.GetMouseButtonDown(1))
         {
-            if (currentState == AxeState.Idle)
+            if (currentState == AxeState.Idle && currentStamina >= secondaryAttackStaminaCost)
             {
                 StartAttack(AttackType.RightClick);
             }
@@ -136,13 +140,13 @@ public class Axe : MonoBehaviour
         // Block (Mouse Wheel - Middle Click)
         if (Input.GetMouseButtonDown(2))
         {
-            if (currentState == AxeState.Idle && currentStamina >= blockStaminaCost)
+            if (currentState == AxeState.Idle && currentStamina > 0)
             {
                 StartBlock();
             }
         }
         
-        // Stop blocking when mouse wheel is released
+        // Stop blocking immediately when mouse wheel is released
         if (Input.GetMouseButtonUp(2))
         {
             if (currentState == AxeState.Blocking)
@@ -181,6 +185,11 @@ public class Axe : MonoBehaviour
         hasHitThisAttack = false;
         SetState(AxeState.Attacking);
         
+        // Consume stamina based on attack type
+        float staminaCost = attackType == AttackType.LeftClick ? primaryAttackStaminaCost : secondaryAttackStaminaCost;
+        currentStamina -= staminaCost;
+        currentStamina = Mathf.Max(currentStamina, 0f); // Ensure stamina doesn't go below 0
+        
         // Play animation
         if (axeAnimator != null)
         {
@@ -203,7 +212,7 @@ public class Axe : MonoBehaviour
         
         if (enableDebugLogs)
         {
-            Debug.Log($"Started {attackType} attack");
+            Debug.Log($"Started {attackType} attack - Stamina cost: {staminaCost}, Remaining: {currentStamina:F1}");
         }
     }
     
@@ -273,8 +282,7 @@ public class Axe : MonoBehaviour
         isBlocking = true;
         SetState(AxeState.Blocking);
         
-        // Consume stamina
-        currentStamina -= blockStaminaCost;
+        // Don't consume stamina immediately - it will drain continuously while blocking
         
         // Play animation
         if (axeAnimator != null)
@@ -287,19 +295,28 @@ public class Axe : MonoBehaviour
         
         if (enableDebugLogs)
         {
-            Debug.Log("Started blocking");
+            Debug.Log("Started blocking - stamina will drain continuously");
         }
     }
     
     void UpdateBlocking()
     {
         // Drain stamina while blocking
-        currentStamina -= Time.deltaTime * (blockStaminaCost / 2f); // Slower drain while holding
+        float staminaDrain = blockStaminaCost * Time.deltaTime; // Drain per second based on initial cost
+        currentStamina -= staminaDrain;
         
-        // Stop blocking if out of stamina or max duration reached
-        if (currentStamina <= 0 || stateTimer >= blockDuration)
+        // Ensure stamina doesn't go below 0
+        currentStamina = Mathf.Max(currentStamina, 0f);
+        
+        // Only stop blocking if stamina runs out (manual release is handled in HandleInput)
+        if (currentStamina <= 0)
         {
             StopBlock();
+            
+            if (enableDebugLogs)
+            {
+                Debug.Log("Blocking stopped - stamina depleted");
+            }
         }
     }
     
@@ -476,16 +493,16 @@ public class Axe : MonoBehaviour
         if (!showDebugInfo)
             return;
             
-        GUILayout.BeginArea(new Rect(10, 200, 250, 180));
+        GUILayout.BeginArea(new Rect(10, 200, 300, 200));
         GUILayout.Label($"Axe: {axeName}");
         GUILayout.Label($"State: {currentState}");
         GUILayout.Label($"Stamina: {currentStamina:F0}/{maxStamina}");
         GUILayout.Label($"Blocking: {(isBlocking ? "YES" : "NO")}");
         GUILayout.Label("");
-        GUILayout.Label("Controls:");
-        GUILayout.Label("Left Click - Primary Attack");
-        GUILayout.Label("Right Click - Heavy Attack");
-        GUILayout.Label("Mouse Wheel - Block");
+        GUILayout.Label("Controls & Costs:");
+        GUILayout.Label($"Left Click - Primary Attack ({primaryAttackStaminaCost} stamina)");
+        GUILayout.Label($"Right Click - Heavy Attack ({secondaryAttackStaminaCost} stamina)");
+        GUILayout.Label($"Mouse Wheel - Block ({blockStaminaCost}/sec stamina)");
         GUILayout.EndArea();
     }
 }
