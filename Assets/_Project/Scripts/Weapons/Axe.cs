@@ -23,25 +23,28 @@ public class Axe : MonoBehaviour
     public string axeName = "Battle Axe";
     public float primaryDamage = 50f;
     public float secondaryDamage = 75f;
-    public float attackRange = 2.5f;
-    public float attackAngle = 90f; // Degrees for swing arc
     
     [Header("Attack Timing")]
     public float primaryAttackDuration = 0.6f;
     public float secondaryAttackDuration = 1.0f;
     public float attackCooldown = 0.3f;
-    public float blockDuration = 2.0f; // How long block lasts if held
+    public float blockDuration = 2.0f;
+    
+    [Header("Collision Settings")]
+    [Range(0f, 1f)] public float attackStartPercent = 0.2f; // When in animation to start collision
+    [Range(0f, 1f)] public float attackEndPercent = 0.8f;   // When in animation to end collision
     
     [Header("Stamina Costs")]
-    public float primaryAttackStaminaCost = 15f; // Stamina cost for left click attack
-    public float secondaryAttackStaminaCost = 25f; // Stamina cost for right click attack
+    public float primaryAttackStaminaCost = 15f;
+    public float secondaryAttackStaminaCost = 25f;
     
-    [Header("Attack Points")]
-    public Transform attackPoint; // Point from which attack originates
+    [Header("Components")]
+    public Collider axeCollider; // Non-trigger collider for the axe blade
     public LayerMask enemyLayers = 1; // What layers can be hit
+    public Rigidbody axeRigidbody; // Required for collision detection
     
     [Header("Effects")]
-    public TrailRenderer swingTrail; // Trail effect for weapon swing
+    public TrailRenderer swingTrail;
     public ParticleSystem hitEffect;
     public AudioClip primarySwingSound;
     public AudioClip secondarySwingSound;
@@ -49,60 +52,45 @@ public class Axe : MonoBehaviour
     public AudioClip blockSound;
     
     [Header("Trail Settings")]
-    public float trailDuration = 0.3f; // How long the trail lasts
-    public bool enableTrailOnlyDuringAttack = true; // If true, trail only shows during attacks
+    public float trailDuration = 0.3f;
+    public bool enableTrailOnlyDuringAttack = true;
     
     [Header("Animation")]
-    public Animator axeAnimator; // For axe animations
+    public Animator axeAnimator;
     public string primaryAttackTrigger = "PrimaryAttack";
     public string secondaryAttackTrigger = "SecondaryAttack";
     public string blockTrigger = "Block";
     public string idleTrigger = "Idle";
     
     [Header("Blocking")]
-    public float blockDamageReduction = 0.8f; // 80% damage reduction when blocking
-    public float blockStaminaCost = 10f; // Stamina drain per second while blocking
+    public float blockDamageReduction = 0.8f;
+    public float blockStaminaCost = 10f;
     public float maxStamina = 100f;
-    public float staminaRegenRate = 20f; // Per second
+    public float staminaRegenRate = 20f;
     
-    [Header("UI")]
+    [Header("Debug")]
     public bool showDebugInfo = true;
     public bool enableDebugLogs = false;
+    public bool showColliderGizmos = true;
     
     // Private variables
     private AxeState currentState = AxeState.Idle;
     private AttackType lastAttackType;
     private float stateTimer = 0f;
     private AudioSource audioSource;
-    private Camera playerCamera;
     private float currentStamina;
     private bool isBlocking = false;
     
-    // Attack detection
+    // Collision control
+    private bool canHitThisAttack = false;
     private bool hasHitThisAttack = false;
+
+    #region Unity Lifecycle
     
     void Start()
     {
-        // Get components
-        playerCamera = GetComponentInParent<Camera>();
-        if (playerCamera == null)
-            playerCamera = Camera.main;
-            
-        audioSource = GetComponent<AudioSource>();
-        if (audioSource == null)
-            audioSource = gameObject.AddComponent<AudioSource>();
-        
-        // Set attack point if not assigned
-        if (attackPoint == null)
-            attackPoint = transform;
-            
-        // Initialize stamina
-        currentStamina = maxStamina;
-        
-        // Setup trail renderer
-        SetupTrailRenderer();
-        
-        // Set initial state
+        InitializeComponents();
+        InitializeSettings();
         SetState(AxeState.Idle);
     }
 
@@ -112,13 +100,107 @@ public class Axe : MonoBehaviour
         UpdateState();
         RegenerateStamina();
     }
-    
+
+    #endregion
+
+    #region Initialization
+
+    void InitializeComponents()
+    {
+        // Get or add AudioSource
+        audioSource = GetComponent<AudioSource>();
+        if (audioSource == null)
+        {
+            audioSource = gameObject.AddComponent<AudioSource>();
+        }
+
+        // Setup axe collider
+        SetupAxeCollider();
+        
+        // Setup trail renderer
+        SetupTrailRenderer();
+        
+        if (enableDebugLogs)
+        {
+            Debug.Log($"[{axeName}] Components initialized");
+        }
+    }
+
+    void InitializeSettings()
+    {
+        // Initialize stamina
+        currentStamina = maxStamina;
+        
+        // Validate settings
+        if (attackStartPercent >= attackEndPercent)
+        {
+            Debug.LogWarning($"[{axeName}] Attack start percent should be less than end percent!");
+            attackEndPercent = attackStartPercent + 0.1f;
+        }
+    }
+
+    void SetupAxeCollider()
+    {
+        if (axeCollider == null)
+        {
+            // Try to find collider in children
+            axeCollider = GetComponentInChildren<Collider>();
+            if (axeCollider == null)
+            {
+                Debug.LogError($"[{axeName}] No axe collider assigned or found! Please assign a non-trigger collider.");
+                return;
+            }
+        }
+
+        // Ensure it's NOT a trigger for collision detection
+        axeCollider.isTrigger = false;
+
+        // Check for Rigidbody
+        if (axeRigidbody == null)
+        {
+            axeRigidbody = axeCollider.GetComponent<Rigidbody>();
+            if (axeRigidbody == null)
+            {
+                axeRigidbody = axeCollider.GetComponentInParent<Rigidbody>();
+            }
+        }
+
+        if (axeRigidbody == null)
+        {
+            Debug.LogWarning($"[{axeName}] No Rigidbody found! Adding kinematic Rigidbody for collision detection.");
+            axeRigidbody = axeCollider.gameObject.AddComponent<Rigidbody>();
+            axeRigidbody.isKinematic = true;
+        }
+
+        if (enableDebugLogs)
+        {
+            Debug.Log($"[{axeName}] Collider setup complete: {axeCollider.name} (Non-trigger: {!axeCollider.isTrigger})");
+        }
+    }
+
+    void SetupTrailRenderer()
+    {
+        if (swingTrail != null)
+        {
+            swingTrail.time = trailDuration;
+            
+            if (enableTrailOnlyDuringAttack)
+            {
+                swingTrail.enabled = false;
+            }
+        }
+    }
+
+    #endregion
+
+    #region Input Handling
+
     void HandleInput()
     {
         // Only handle input when idle or blocking
         if (currentState != AxeState.Idle && currentState != AxeState.Blocking)
             return;
-            
+
         // Primary attack (Left Click)
         if (Input.GetMouseButtonDown(0))
         {
@@ -127,7 +209,7 @@ public class Axe : MonoBehaviour
                 StartAttack(AttackType.LeftClick);
             }
         }
-        
+
         // Secondary attack (Right Click)
         if (Input.GetMouseButtonDown(1))
         {
@@ -136,8 +218,8 @@ public class Axe : MonoBehaviour
                 StartAttack(AttackType.RightClick);
             }
         }
-        
-        // Block (Mouse Wheel - Middle Click)
+
+        // Block (Middle Mouse Button)
         if (Input.GetMouseButtonDown(2))
         {
             if (currentState == AxeState.Idle && currentStamina > 0)
@@ -145,8 +227,8 @@ public class Axe : MonoBehaviour
                 StartBlock();
             }
         }
-        
-        // Stop blocking immediately when mouse wheel is released
+
+        // Stop blocking
         if (Input.GetMouseButtonUp(2))
         {
             if (currentState == AxeState.Blocking)
@@ -155,21 +237,25 @@ public class Axe : MonoBehaviour
             }
         }
     }
-    
+
+    #endregion
+
+    #region State Management
+
     void UpdateState()
     {
         stateTimer += Time.deltaTime;
-        
+
         switch (currentState)
         {
             case AxeState.Attacking:
                 UpdateAttacking();
                 break;
-                
+
             case AxeState.Blocking:
                 UpdateBlocking();
                 break;
-                
+
             case AxeState.Cooldown:
                 if (stateTimer >= attackCooldown)
                 {
@@ -178,280 +264,232 @@ public class Axe : MonoBehaviour
                 break;
         }
     }
-    
+
+    void SetState(AxeState newState)
+    {
+        AxeState previousState = currentState;
+        currentState = newState;
+        stateTimer = 0f;
+
+        // Handle state-specific setup
+        switch (newState)
+        {
+            case AxeState.Idle:
+                if (axeAnimator != null && previousState != AxeState.Idle)
+                {
+                    axeAnimator.SetTrigger(idleTrigger);
+                }
+                break;
+
+            case AxeState.Attacking:
+                // Reset attack flags
+                hasHitThisAttack = false;
+                break;
+
+            case AxeState.Blocking:
+                break;
+
+            case AxeState.Cooldown:
+                StopSwingTrail();
+                break;
+        }
+
+        if (enableDebugLogs)
+        {
+            Debug.Log($"[{axeName}] State: {previousState} → {newState}");
+        }
+    }
+
+    #endregion
+
+    #region Attack System
+
     void StartAttack(AttackType attackType)
     {
         lastAttackType = attackType;
-        hasHitThisAttack = false;
         SetState(AxeState.Attacking);
-        
-        // Consume stamina based on attack type
+
+        // Consume stamina
         float staminaCost = attackType == AttackType.LeftClick ? primaryAttackStaminaCost : secondaryAttackStaminaCost;
-        currentStamina -= staminaCost;
-        currentStamina = Mathf.Max(currentStamina, 0f); // Ensure stamina doesn't go below 0
-        
+        currentStamina = Mathf.Max(0f, currentStamina - staminaCost);
+
         // Play animation
         if (axeAnimator != null)
         {
-            if (attackType == AttackType.LeftClick)
-            {
-                axeAnimator.SetTrigger(primaryAttackTrigger);
-            }
-            else
-            {
-                axeAnimator.SetTrigger(secondaryAttackTrigger);
-            }
+            string trigger = attackType == AttackType.LeftClick ? primaryAttackTrigger : secondaryAttackTrigger;
+            axeAnimator.SetTrigger(trigger);
         }
-        
+
         // Play sound
         AudioClip soundToPlay = attackType == AttackType.LeftClick ? primarySwingSound : secondarySwingSound;
         PlaySound(soundToPlay);
-        
-        // Start swing trail effect
+
+        // Start swing trail
         StartSwingTrail();
-        
+
         if (enableDebugLogs)
         {
-            Debug.Log($"Started {attackType} attack - Stamina cost: {staminaCost}, Remaining: {currentStamina:F1}");
+            Debug.Log($"[{axeName}] Started {attackType} attack - Stamina: {currentStamina:F1}/{maxStamina}");
         }
     }
-    
+
     void UpdateAttacking()
     {
         float attackDuration = lastAttackType == AttackType.LeftClick ? primaryAttackDuration : secondaryAttackDuration;
         float attackProgress = stateTimer / attackDuration;
-        
-        // Check for hits during the middle portion of the attack (30% to 70% of animation)
-        if (attackProgress >= 0.3f && attackProgress <= 0.7f && !hasHitThisAttack)
-        {
-            CheckForHits();
-        }
-        
+
         // End attack when duration is complete
         if (stateTimer >= attackDuration)
         {
-            StopSwingTrail();
             SetState(AxeState.Cooldown);
         }
     }
-    
-    void CheckForHits()
+
+    void UpdateColliderDuringAttack(float attackProgress)
     {
-        Vector3 attackOrigin = attackPoint.position;
-        Vector3 attackDirection = attackPoint.forward;
-        
-        // Get all colliders within attack range
-        Collider[] hitColliders = Physics.OverlapSphere(attackOrigin, attackRange, enemyLayers);
-        
-        foreach (Collider hitCollider in hitColliders)
+        bool shouldBeActive = attackProgress >= attackStartPercent && 
+                             attackProgress <= attackEndPercent && 
+                             !hasHitThisAttack;
+
+        bool wasActive = canHitThisAttack;
+        canHitThisAttack = shouldBeActive;
+
+        // Enable/disable collider based on attack window
+        if (axeCollider != null && axeCollider.enabled != shouldBeActive)
         {
-            // Check if the target is within the attack angle
-            Vector3 directionToTarget = (hitCollider.transform.position - attackOrigin).normalized;
-            float angleToTarget = Vector3.Angle(attackDirection, directionToTarget);
-            
-            if (angleToTarget <= attackAngle / 2f)
-            {
-                // We hit something!
-                hasHitThisAttack = true;
-                
-                float damage = lastAttackType == AttackType.LeftClick ? primaryDamage : secondaryDamage;
-                
-                // Apply damage if it's damageable
-                var damageable = hitCollider.GetComponent<IDamageable>();
-                if (damageable != null)
-                {
-                    damageable.TakeDamage(damage);
-                    
-                    if (enableDebugLogs)
-                    {
-                        Debug.Log($"Axe hit {hitCollider.name} for {damage} damage");
-                    }
-                }
-                
-                // Play hit effects
-                PlayHitEffects(hitCollider.transform.position);
-                
-                // Only hit one target per swing
-                break;
-            }
+            axeCollider.enabled = shouldBeActive;
+
+            Debug.Log($"[ATTACK] Collider {(shouldBeActive ? "enabled" : "disabled")} - Progress: {attackProgress:F2}, Window: {attackStartPercent}-{attackEndPercent}");
         }
     }
-    
+
+    #endregion
+
+    #region Collision Detection
+
+    void OnCollisionEnter(Collision collision)
+    {
+        Debug.Log($"[COLLISION] Collision detected with {collision.gameObject.name}");
+        Debug.Log($"[COLLISION] Current state: {currentState}");
+        Debug.Log($"[COLLISION] Has hit this attack: {hasHitThisAttack}");
+        Debug.Log($"[COLLISION] Target layer: {collision.gameObject.layer}");
+        Debug.Log($"[COLLISION] Enemy layers mask: {enemyLayers.value}");
+        
+        // Only process hits when attacking and haven't hit yet
+        if (hasHitThisAttack || currentState != AxeState.Attacking)
+        {
+            Debug.Log($"[COLLISION] Hit rejected - hasHit: {hasHitThisAttack}, state: {currentState}");
+            return;
+        }
+
+        // Check if object is on correct layer
+        if (!IsValidTarget(collision.collider))
+        {
+            Debug.Log($"[COLLISION] Hit rejected - invalid target layer");
+            return;
+        }
+
+        Debug.Log($"[COLLISION] Processing hit with {collision.gameObject.name}!");
+        // Process the hit
+        ProcessHit(collision);
+    }
+
+    bool IsValidTarget(Collider target)
+    {
+        int targetLayerMask = 1 << target.gameObject.layer;
+        bool isValid = (targetLayerMask & enemyLayers) != 0;
+        
+        if (!isValid)
+        {
+            Debug.Log($"[LAYER MISMATCH] Object {target.name} is on layer {target.gameObject.layer} (mask: {targetLayerMask}), but enemyLayers mask is {enemyLayers.value}");
+            Debug.Log($"[LAYER FIX] To hit this object, set enemyLayers to include layer {target.gameObject.layer} in the inspector");
+        }
+        
+        return isValid;
+    }
+
+    void ProcessHit(Collision collision)
+    {
+        // Mark that we've hit something this attack
+        hasHitThisAttack = true;
+
+        // Get collision info
+        Vector3 hitPoint = collision.contacts.Length > 0 ? collision.contacts[0].point : collision.collider.transform.position;
+        Collider hitCollider = collision.collider;
+
+        // Calculate damage
+        float damage = lastAttackType == AttackType.LeftClick ? primaryDamage : secondaryDamage;
+
+        // Apply damage
+        var damageable = hitCollider.GetComponent<IDamageable>();
+        if (damageable != null)
+        {
+            damageable.TakeDamage(damage);
+
+            if (enableDebugLogs)
+            {
+                Debug.Log($"[{axeName}] Hit {hitCollider.name} for {damage} damage");
+            }
+        }
+
+        // Play hit effects
+        PlayHitEffects(hitPoint);
+
+        // Play hit sound
+        PlaySound(hitSound);
+    }
+
+    #endregion
+
+    #region Blocking System
+
     void StartBlock()
     {
         isBlocking = true;
         SetState(AxeState.Blocking);
-        
-        // Don't consume stamina immediately - it will drain continuously while blocking
-        
-        // Play animation
+
         if (axeAnimator != null)
         {
             axeAnimator.SetTrigger(blockTrigger);
         }
-        
-        // Play sound
+
         PlaySound(blockSound);
-        
+
         if (enableDebugLogs)
         {
-            Debug.Log("Started blocking - stamina will drain continuously");
+            Debug.Log($"[{axeName}] Started blocking");
         }
     }
-    
+
     void UpdateBlocking()
     {
         // Drain stamina while blocking
-        float staminaDrain = blockStaminaCost * Time.deltaTime; // Drain per second based on initial cost
-        currentStamina -= staminaDrain;
-        
-        // Ensure stamina doesn't go below 0
-        currentStamina = Mathf.Max(currentStamina, 0f);
-        
-        // Only stop blocking if stamina runs out (manual release is handled in HandleInput)
+        float staminaDrain = blockStaminaCost * Time.deltaTime;
+        currentStamina = Mathf.Max(0f, currentStamina - staminaDrain);
+
+        // Stop blocking if stamina runs out
         if (currentStamina <= 0)
         {
             StopBlock();
-            
-            if (enableDebugLogs)
-            {
-                Debug.Log("Blocking stopped - stamina depleted");
-            }
         }
     }
-    
+
     void StopBlock()
     {
         isBlocking = false;
         SetState(AxeState.Idle);
-        
+
         if (enableDebugLogs)
         {
-            Debug.Log("Stopped blocking");
+            Debug.Log($"[{axeName}] Stopped blocking");
         }
     }
-    
-    void SetState(AxeState newState)
-    {
-        currentState = newState;
-        stateTimer = 0f;
-        
-        // Set idle animation when returning to idle
-        if (newState == AxeState.Idle && axeAnimator != null)
-        {
-            axeAnimator.SetTrigger(idleTrigger);
-        }
-    }
-    
-    void RegenerateStamina()
-    {
-        if (currentState != AxeState.Blocking && currentStamina < maxStamina)
-        {
-            currentStamina += staminaRegenRate * Time.deltaTime;
-            currentStamina = Mathf.Min(currentStamina, maxStamina);
-        }
-    }
-    
-    void PlayHitEffects(Vector3 hitPosition)
-    {
-        // Play hit particle effect
-        if (hitEffect != null)
-        {
-            hitEffect.transform.position = hitPosition;
-            hitEffect.Play();
-        }
-        
-        // Play hit sound
-        PlaySound(hitSound);
-    }
-    
-    void PlaySound(AudioClip clip)
-    {
-        if (clip != null && audioSource != null)
-        {
-            audioSource.PlayOneShot(clip);
-        }
-    }
-    
-    void StartSwingTrail()
-    {
-        if (swingTrail != null)
-        {
-            // Enable the trail renderer
-            swingTrail.enabled = true;
-            
-            // Clear any existing trail
-            swingTrail.Clear();
-            
-            // Set trail time
-            swingTrail.time = trailDuration;
-            
-            if (enableDebugLogs)
-            {
-                Debug.Log("Started swing trail effect");
-            }
-        }
-    }
-    
-    void StopSwingTrail()
-    {
-        if (swingTrail != null && enableTrailOnlyDuringAttack)
-        {
-            // Start coroutine to fade out trail instead of instantly disabling
-            StartCoroutine(FadeOutTrail());
-        }
-    }
-    
-    IEnumerator FadeOutTrail()
-    {
-        if (swingTrail == null) yield break;
-        
-        // Wait for the trail to naturally fade based on its time setting
-        yield return new WaitForSeconds(swingTrail.time);
-        
-        // Disable trail renderer to stop it from rendering
-        if (enableTrailOnlyDuringAttack)
-        {
-            swingTrail.enabled = false;
-        }
-        
-        if (enableDebugLogs)
-        {
-            Debug.Log("Stopped swing trail effect");
-        }
-    }
-    
-    void SetupTrailRenderer()
-    {
-        if (swingTrail != null)
-        {
-            // Configure trail settings
-            swingTrail.time = trailDuration;
-            
-            // Disable trail initially if set to only show during attacks
-            if (enableTrailOnlyDuringAttack)
-            {
-                swingTrail.enabled = false;
-            }
-            
-            if (enableDebugLogs)
-            {
-                Debug.Log("Trail renderer setup complete");
-            }
-        }
-        else if (enableDebugLogs)
-        {
-            Debug.LogWarning("No TrailRenderer assigned to Axe script! Please assign a TrailRenderer in the inspector for swing effects.");
-        }
-    }
-    
-    // Public method for other scripts to check if axe is blocking (for damage reduction)
+
     public bool IsBlocking()
     {
         return isBlocking && currentState == AxeState.Blocking;
     }
-    
-    // Public method for applying damage reduction when blocking
+
     public float GetBlockedDamage(float incomingDamage)
     {
         if (IsBlocking())
@@ -460,49 +498,152 @@ public class Axe : MonoBehaviour
         }
         return incomingDamage;
     }
-    
-    void OnDrawGizmosSelected()
+
+    #endregion
+
+    #region Effects and Audio
+
+    void PlayHitEffects(Vector3 hitPosition)
     {
-        if (attackPoint == null)
-            return;
-            
-        // Draw attack range
-        Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(attackPoint.position, attackRange);
-        
-        // Draw attack angle
-        Vector3 attackDirection = attackPoint.forward;
-        Vector3 leftBoundary = Quaternion.Euler(0, -attackAngle / 2f, 0) * attackDirection;
-        Vector3 rightBoundary = Quaternion.Euler(0, attackAngle / 2f, 0) * attackDirection;
-        
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawRay(attackPoint.position, leftBoundary * attackRange);
-        Gizmos.DrawRay(attackPoint.position, rightBoundary * attackRange);
-        
-        // Draw arc
-        for (int i = 0; i < 10; i++)
+        // Play particle effect at hit point
+        if (hitEffect != null)
         {
-            float angle = Mathf.Lerp(-attackAngle / 2f, attackAngle / 2f, i / 9f);
-            Vector3 direction = Quaternion.Euler(0, angle, 0) * attackDirection;
-            Gizmos.DrawRay(attackPoint.position, direction * attackRange);
+            hitEffect.transform.position = hitPosition;
+            hitEffect.Play();
         }
     }
-    
+
+    void PlaySound(AudioClip clip)
+    {
+        if (clip != null && audioSource != null)
+        {
+            audioSource.PlayOneShot(clip);
+        }
+    }
+
+    void StartSwingTrail()
+    {
+        if (swingTrail != null)
+        {
+            swingTrail.enabled = true;
+            swingTrail.Clear();
+            swingTrail.time = trailDuration;
+        }
+    }
+
+    void StopSwingTrail()
+    {
+        if (swingTrail != null && enableTrailOnlyDuringAttack)
+        {
+            StartCoroutine(FadeOutTrail());
+        }
+    }
+
+    IEnumerator FadeOutTrail()
+    {
+        if (swingTrail == null) yield break;
+
+        yield return new WaitForSeconds(swingTrail.time);
+
+        if (enableTrailOnlyDuringAttack)
+        {
+            swingTrail.enabled = false;
+        }
+    }
+
+    #endregion
+
+    #region Stamina System
+
+    void RegenerateStamina()
+    {
+        if (currentState != AxeState.Blocking && currentStamina < maxStamina)
+        {
+            currentStamina = Mathf.Min(maxStamina, currentStamina + staminaRegenRate * Time.deltaTime);
+        }
+    }
+
+    #endregion
+
+    #region Debug and Visualization
+
+    void OnDrawGizmosSelected()
+    {
+        if (!showColliderGizmos || axeCollider == null)
+            return;
+
+        // Set color based on collider state
+        if (canHitThisAttack && currentState == AxeState.Attacking)
+        {
+            Gizmos.color = Color.green; // Active and can hit
+        }
+        else if (currentState == AxeState.Attacking)
+        {
+            Gizmos.color = Color.orange; // Attacking but not in hit window
+        }
+        else
+        {
+            Gizmos.color = Color.gray; // Inactive
+        }
+
+        // Draw collider bounds
+        Gizmos.matrix = axeCollider.transform.localToWorldMatrix;
+
+        if (axeCollider is BoxCollider box)
+        {
+            Gizmos.DrawWireCube(box.center, box.size);
+            if (canHitThisAttack)
+                Gizmos.DrawCube(box.center, box.size * 0.8f);
+        }
+        else if (axeCollider is SphereCollider sphere)
+        {
+            Gizmos.DrawWireSphere(sphere.center, sphere.radius);
+            if (canHitThisAttack)
+                Gizmos.DrawSphere(sphere.center, sphere.radius * 0.8f);
+        }
+        else if (axeCollider is CapsuleCollider capsule)
+        {
+            Gizmos.DrawWireSphere(capsule.center, capsule.radius);
+            if (canHitThisAttack)
+                Gizmos.DrawSphere(capsule.center, capsule.radius * 0.8f);
+        }
+
+        Gizmos.matrix = Matrix4x4.identity;
+    }
+
     void OnGUI()
     {
         if (!showDebugInfo)
             return;
-            
-        GUILayout.BeginArea(new Rect(10, 200, 300, 200));
-        GUILayout.Label($"Axe: {axeName}");
+
+        GUILayout.BeginArea(new Rect(10, 200, 350, 200));
+        GUILayout.Label($"=== {axeName} Debug ===");
         GUILayout.Label($"State: {currentState}");
         GUILayout.Label($"Stamina: {currentStamina:F0}/{maxStamina}");
         GUILayout.Label($"Blocking: {(isBlocking ? "YES" : "NO")}");
         GUILayout.Label("");
-        GUILayout.Label("Controls & Costs:");
-        GUILayout.Label($"Left Click - Primary Attack ({primaryAttackStaminaCost} stamina)");
-        GUILayout.Label($"Right Click - Heavy Attack ({secondaryAttackStaminaCost} stamina)");
-        GUILayout.Label($"Mouse Wheel - Block ({blockStaminaCost}/sec stamina)");
+        GUILayout.Label("=== Collision ===");
+        GUILayout.Label($"Can Hit: {canHitThisAttack}");
+        GUILayout.Label($"Has Hit: {hasHitThisAttack}");
+        GUILayout.Label($"Collider Enabled: {(axeCollider?.enabled ?? false)}");
+
+        if (currentState == AxeState.Attacking)
+        {
+            float attackDuration = lastAttackType == AttackType.LeftClick ? primaryAttackDuration : secondaryAttackDuration;
+            float progress = stateTimer / attackDuration;
+            GUILayout.Label($"Attack Progress: {progress:F2}");
+            
+            bool inWindow = progress >= attackStartPercent && progress <= attackEndPercent;
+            GUILayout.Label($"In Hit Window: {inWindow}");
+        }
+
+        GUILayout.Label("");
+        GUILayout.Label("Controls:");
+        GUILayout.Label($"Left Click - Primary ({primaryAttackStaminaCost} stamina)");
+        GUILayout.Label($"Right Click - Heavy ({secondaryAttackStaminaCost} stamina)");
+        GUILayout.Label($"Middle Click - Block ({blockStaminaCost}/sec stamina)");
         GUILayout.EndArea();
     }
+
+    #endregion
 }
