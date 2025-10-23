@@ -14,7 +14,8 @@ GameObject:
   - component: {fileID: 5243453004584649684}
   - component: {fileID: 5882943330571928109}
   - component: {fileID: 6283868058081412645}
-  m_Layer: 0
+  - component: {fileID: 4033628761474352261}
+  m_Layer: 6
   m_Name: Wood
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -29,7 +30,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2401821047598377511}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 21.71, y: 8.027966, z: 4.494}
   m_LocalScale: {x: 0.3636, y: 0.36360002, z: 0.3636}
   m_ConstrainProportionsScale: 0
@@ -175,6 +176,37 @@ MonoBehaviour:
   groundLayer:
     serializedVersion: 2
     m_Bits: 16
+--- !u!114 &4033628761474352261
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2401821047598377511}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2c239a99bd5a1394f91b97738fb229a5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ResourcePickup
+  resourceName: Wood
+  resourceType: 0
+  quantity: 1
+  pickupRange: 3
+  autoPickup: 0
+  manualPickupKey: 101
+  pickupEffect: {fileID: 2357869978834923131, guid: 9659aa8806a0c6e45a66d2e433495214, type: 3}
+  pickupSound: {fileID: 8300000, guid: 9019c49d069fcf8409378bc3118f09f6, type: 3}
+  destroyOnPickup: 1
+  bobSpeed: 0
+  bobHeight: 0
+  showPickupPrompt: 1
+  pickupPromptText: Press E to pick up
+  deleteHeightThreshold: -50
+  enableFloorProtection: 1
+  floorLayerMask:
+    serializedVersion: 2
+    m_Bits: 1
+  floorCheckDistance: 1
 --- !u!1 &6515921949323141069
 GameObject:
   m_ObjectHideFlags: 0
@@ -186,7 +218,7 @@ GameObject:
   - component: {fileID: 5033192858322263707}
   - component: {fileID: 7289593800516517999}
   - component: {fileID: 147465779889783172}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Destroy Effect (1)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -225,7 +257,7 @@ ParticleSystem:
   emitterVelocityMode: 1
   looping: 0
   prewarm: 0
-  playOnAwake: 1
+  playOnAwake: 0
   useUnscaledTime: 0
   autoRandomSeed: 1
   startDelay:
@@ -5080,7 +5112,7 @@ GameObject:
   - component: {fileID: 6117088903288576933}
   - component: {fileID: 6975745734819250460}
   - component: {fileID: 1248664601167128234}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: hit effect (1)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5119,7 +5151,7 @@ ParticleSystem:
   emitterVelocityMode: 1
   looping: 0
   prewarm: 0
-  playOnAwake: 1
+  playOnAwake: 0
   useUnscaledTime: 0
   autoRandomSeed: 1
   startDelay:

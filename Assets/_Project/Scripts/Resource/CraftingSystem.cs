@@ -116,12 +116,36 @@ public class CraftingSystem : MonoBehaviour
         {
             ToggleCraftingMenu();
         }
+        
+        // Close crafting menu with ESC key
+        if (Input.GetKeyDown(KeyCode.Escape) && isCraftingMenuOpen)
+        {
+            CloseCraftingMenu();
+        }
     }
     
     void ToggleCraftingMenu()
     {
         isCraftingMenuOpen = !isCraftingMenuOpen;
         Debug.Log($"Crafting menu {(isCraftingMenuOpen ? "opened" : "closed")}");
+    }
+    
+    void CloseCraftingMenu()
+    {
+        if (isCraftingMenuOpen)
+        {
+            isCraftingMenuOpen = false;
+            Debug.Log("Crafting menu closed");
+        }
+    }
+    
+    void OpenCraftingMenu()
+    {
+        if (!isCraftingMenuOpen)
+        {
+            isCraftingMenuOpen = true;
+            Debug.Log("Crafting menu opened");
+        }
     }
     
     void CreateDefaultRecipes()

@@ -225,6 +225,15 @@ public class InventoryManager : MonoBehaviour
         return false;
     }
     
+    public bool DropItem(string itemName, int quantity = 1)
+    {
+        if (inventorySystem != null)
+        {
+            return inventorySystem.DropItemByName(itemName, quantity);
+        }
+        return false;
+    }
+    
     // Quick access methods for common items
     public void AddWood(int amount)
     {
@@ -309,6 +318,20 @@ public class InventoryManager : MonoBehaviour
             {
                 inventorySystem.ClearInventory();
             }
+        }
+        
+        GUILayout.Space(5);
+        
+        GUILayout.Label("=== DROP ITEMS ===", GUI.skin.box);
+        
+        if (GUILayout.Button("Drop 5 Wood"))
+        {
+            DropItem("Oak Wood", 5);
+        }
+        
+        if (GUILayout.Button("Drop 1 Weapon"))
+        {
+            DropItem("Battle Axe", 1);
         }
         
         GUILayout.Space(10);

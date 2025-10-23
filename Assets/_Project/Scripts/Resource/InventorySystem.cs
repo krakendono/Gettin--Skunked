@@ -202,9 +202,17 @@ public class InventorySystem : MonoBehaviour
     public int weaponSlotsCount = 8;
     public int keyItemSlotsCount = 12;
     
-    [Header("UI Settings")]
+    [Header("Debug")]
     public bool showDebugInventory = true;
     public KeyCode inventoryToggleKey = KeyCode.Tab;
+    public bool addExampleItemsOnStart = true; // Toggle to disable example items
+    
+    [Header("Item Dropping")]
+    public Transform itemDropPoint; // Where to spawn dropped items
+    public float dropForce = 3f; // Force applied to dropped items
+    public float dropRadius = 1f; // Random spread radius for dropped items
+    public float dropUpwardBurst = 5f; // Upward force to prevent clipping through floor
+    public bool enableItemDropping = true;
     
     [Header("Audio")]
     public AudioClip pickupSound;
@@ -236,8 +244,11 @@ public class InventorySystem : MonoBehaviour
         InitializeInventory();
         SetupAudio();
         
-        // Add some example items for testing
-        AddExampleItems();
+        // Add some example items for testing (only if enabled)
+        if (addExampleItemsOnStart)
+        {
+            AddExampleItems();
+        }
     }
     
     void Update()
@@ -287,6 +298,12 @@ public class InventorySystem : MonoBehaviour
         {
             ToggleInventory();
         }
+        
+        // Close inventory with ESC key
+        if (Input.GetKeyDown(KeyCode.Escape) && isInventoryOpen)
+        {
+            CloseInventory();
+        }
     }
     
     void ToggleInventory()
@@ -295,8 +312,26 @@ public class InventorySystem : MonoBehaviour
         Debug.Log($"Inventory {(isInventoryOpen ? "opened" : "closed")}");
     }
     
+    void CloseInventory()
+    {
+        if (isInventoryOpen)
+        {
+            isInventoryOpen = false;
+            Debug.Log("Inventory closed");
+        }
+    }
+    
+    void OpenInventory()
+    {
+        if (!isInventoryOpen)
+        {
+            isInventoryOpen = true;
+            Debug.Log("Inventory opened");
+        }
+    }
+    
     // Add item to inventory
-    public bool AddItem(InventoryItem item)
+    public bool AddItem(InventoryItem item, bool playSound = true)
     {
         if (item == null) return false;
         
@@ -310,7 +345,7 @@ public class InventorySystem : MonoBehaviour
                 if (slot.AddItem(item))
                 {
                     OnItemAdded?.Invoke(item);
-                    PlaySound(pickupSound);
+                    if (playSound) PlaySound(pickupSound);
                     return true;
                 }
             }
@@ -324,7 +359,7 @@ public class InventorySystem : MonoBehaviour
                 if (slot.AddItem(item))
                 {
                     OnItemAdded?.Invoke(item);
-                    PlaySound(pickupSound);
+                    if (playSound) PlaySound(pickupSound);
                     return true;
                 }
             }
@@ -425,6 +460,226 @@ public class InventorySystem : MonoBehaviour
         }
     }
     
+    // Drop item from inventory
+    public bool DropItem(InventoryItem item, int quantity = 1)
+    {
+        if (item == null || !enableItemDropping) return false;
+        
+        // Find the item in inventory and remove it
+        foreach (var slotList in new[] { resourceSlots, weaponSlots, keyItemSlots })
+        {
+            foreach (var slot in slotList)
+            {
+                if (!slot.isEmpty && slot.item == item)
+                {
+                    int amountToDrop = Mathf.Min(quantity, slot.item.quantity);
+                    
+                    // Create dropped item
+                    SpawnDroppedItem(item, amountToDrop);
+                    
+                    // Remove from inventory
+                    slot.RemoveItem(amountToDrop);
+                    OnItemRemoved?.Invoke(item);
+                    
+                    Debug.Log($"Dropped {amountToDrop}x {item.itemName}");
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    // Drop item by name
+    public bool DropItemByName(string itemName, int quantity = 1)
+    {
+        foreach (var slotList in new[] { resourceSlots, weaponSlots, keyItemSlots })
+        {
+            foreach (var slot in slotList)
+            {
+                if (!slot.isEmpty && slot.item.itemName == itemName)
+                {
+                    return DropItem(slot.item, quantity);
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    // Spawn the actual dropped item in the world
+    void SpawnDroppedItem(InventoryItem originalItem, int quantity)
+    {
+        // Determine spawn position
+        Vector3 spawnPosition = GetDropPosition();
+        
+        // Create appropriate pickup based on item type
+        GameObject droppedObject = null;
+        
+        if (originalItem is ResourceItem resource)
+        {
+            droppedObject = CreateResourcePickup(resource, quantity, spawnPosition);
+        }
+        else if (originalItem is WeaponItem weapon)
+        {
+            droppedObject = CreateWeaponPickup(weapon, spawnPosition);
+        }
+        else if (originalItem is KeyItem keyItem)
+        {
+            droppedObject = CreateKeyItemPickup(keyItem, spawnPosition);
+        }
+        
+        // Apply physics if rigidbody exists
+        if (droppedObject != null)
+        {
+            Rigidbody rb = droppedObject.GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                // Apply upward burst first to prevent floor clipping
+                Vector3 upwardBurst = Vector3.up * dropUpwardBurst;
+                rb.AddForce(upwardBurst, ForceMode.Impulse);
+                
+                // Then add horizontal spread force
+                Vector3 randomDirection = new Vector3(
+                    Random.Range(-1f, 1f),
+                    0f, // No additional Y force here, we already applied upward burst
+                    Random.Range(-1f, 1f)
+                ).normalized;
+                
+                rb.AddForce(randomDirection * dropForce, ForceMode.Impulse);
+            }
+        }
+    }
+    
+    Vector3 GetDropPosition()
+    {
+        Vector3 basePosition;
+        
+        // Use drop point if assigned, otherwise use player position
+        if (itemDropPoint != null)
+        {
+            basePosition = itemDropPoint.position;
+        }
+        else
+        {
+            // Try to find player
+            GameObject player = GameObject.FindGameObjectWithTag("Player");
+            if (player != null)
+            {
+                basePosition = player.transform.position + Vector3.forward * 2f; // Drop in front of player
+            }
+            else
+            {
+                basePosition = Vector3.zero; // Fallback
+            }
+        }
+        
+        // Add random spread
+        Vector2 randomOffset = Random.insideUnitCircle * dropRadius;
+        return basePosition + new Vector3(randomOffset.x, 0.5f, randomOffset.y);
+    }
+    
+    GameObject CreateResourcePickup(ResourceItem resource, int quantity, Vector3 position)
+    {
+        // Create a simple cube for resource
+        GameObject pickup = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        pickup.transform.position = position;
+        pickup.transform.localScale = Vector3.one * 0.5f;
+        pickup.name = $"Dropped_{resource.itemName}";
+        
+        // Set material color based on resource type
+        Renderer renderer = pickup.GetComponent<Renderer>();
+        renderer.material.color = GetResourceColor(resource.resourceType);
+        
+        // Add ResourcePickup component
+        ResourcePickup pickupScript = pickup.AddComponent<ResourcePickup>();
+        pickupScript.resourceName = resource.itemName;
+        pickupScript.resourceType = resource.resourceType;
+        pickupScript.quantity = quantity;
+        pickupScript.autoPickup = false; // Manual pickup for dropped items
+        pickupScript.bobHeight = 0f; // No bobbing for dropped items
+        pickupScript.bobSpeed = 0f; // No bobbing animation
+        
+        return pickup;
+    }
+    
+    GameObject CreateWeaponPickup(WeaponItem weapon, Vector3 position)
+    {
+        // Create a capsule for weapon
+        GameObject pickup = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+        pickup.transform.position = position;
+        pickup.transform.localScale = new Vector3(0.3f, 0.8f, 0.3f);
+        pickup.name = $"Dropped_{weapon.itemName}";
+        
+        // Set material color based on weapon type
+        Renderer renderer = pickup.GetComponent<Renderer>();
+        renderer.material.color = GetWeaponColor(weapon.weaponType);
+        
+        // Add WeaponPickup component
+        WeaponPickup pickupScript = pickup.AddComponent<WeaponPickup>();
+        pickupScript.weaponName = weapon.itemName;
+        pickupScript.weaponType = weapon.weaponType;
+        pickupScript.damage = weapon.damage;
+        pickupScript.maxDurability = weapon.durability; // Use current durability
+        pickupScript.weaponPrefab = weapon.weaponPrefab;
+        pickupScript.autoPickup = false; // Manual pickup for dropped items
+        pickupScript.bobHeight = 0f; // No bobbing for dropped items
+        pickupScript.bobSpeed = 0f; // No bobbing animation
+        pickupScript.rotationSpeed = 0f; // No rotation for dropped items
+        
+        return pickup;
+    }
+    
+    GameObject CreateKeyItemPickup(KeyItem keyItem, Vector3 position)
+    {
+        // Create a sphere for key items
+        GameObject pickup = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        pickup.transform.position = position;
+        pickup.transform.localScale = Vector3.one * 0.4f;
+        pickup.name = $"Dropped_{keyItem.itemName}";
+        
+        // Set material color (golden for key items)
+        Renderer renderer = pickup.GetComponent<Renderer>();
+        renderer.material.color = Color.yellow;
+        
+        // Add a simple pickup script (you might want to create a KeyItemPickup script)
+        ResourcePickup pickupScript = pickup.AddComponent<ResourcePickup>();
+        pickupScript.resourceName = keyItem.itemName;
+        pickupScript.resourceType = ResourceType.Other;
+        pickupScript.quantity = 1;
+        pickupScript.autoPickup = false; // Manual pickup for dropped items
+        pickupScript.bobHeight = 0f; // No bobbing for dropped items
+        pickupScript.bobSpeed = 0f; // No bobbing animation
+        
+        return pickup;
+    }
+    
+    Color GetResourceColor(ResourceType resourceType)
+    {
+        return resourceType switch
+        {
+            ResourceType.Wood => new Color(0.6f, 0.3f, 0.1f), // Brown
+            ResourceType.Stone => Color.gray,
+            ResourceType.Metal => new Color(0.8f, 0.8f, 0.9f), // Silver
+            ResourceType.Food => Color.green,
+            ResourceType.Honey => Color.yellow,
+            ResourceType.HoneyComb => new Color(1f, 0.8f, 0.2f), // Orange-yellow
+            ResourceType.Bones => new Color(0.9f, 0.9f, 0.8f), // Off-white
+            _ => Color.white
+        };
+    }
+    
+    Color GetWeaponColor(WeaponType weaponType)
+    {
+        return weaponType switch
+        {
+            WeaponType.Melee => Color.red,
+            WeaponType.Ranged => Color.blue,
+            WeaponType.Tool => new Color(0.5f, 0.3f, 0.1f), // Dark brown
+            _ => Color.magenta
+        };
+    }
+    
     // Helper methods
     private List<InventorySlot> GetSlotsForItemType(ItemType itemType)
     {
@@ -484,20 +739,20 @@ public class InventorySystem : MonoBehaviour
     // Add example items for testing
     private void AddExampleItems()
     {
-        // Add some wood resources
-        AddItem(new ResourceItem("Oak Wood", ResourceType.Wood, 25));
-        AddItem(new ResourceItem("Pine Wood", ResourceType.Wood, 15));
-        AddItem(new ResourceItem("Iron Ore", ResourceType.Metal, 10));
-        AddItem(new ResourceItem("Stone", ResourceType.Stone, 30));
+        // Add some wood resources (silent - no pickup sound)
+        AddItem(new ResourceItem("Oak Wood", ResourceType.Wood, 25), false);
+        AddItem(new ResourceItem("Pine Wood", ResourceType.Wood, 15), false);
+        AddItem(new ResourceItem("Iron Ore", ResourceType.Metal, 10), false);
+        AddItem(new ResourceItem("Stone", ResourceType.Stone, 30), false);
         
-        // Add some weapons
-        AddItem(new WeaponItem("Battle Axe", WeaponType.Melee, 50f, 100f));
-        AddItem(new WeaponItem("Pistol", WeaponType.Ranged, 25f, 80f));
-        AddItem(new WeaponItem("Hunting Knife", WeaponType.Melee, 20f, 60f));
+        // Add some weapons (silent - no pickup sound)
+        AddItem(new WeaponItem("Battle Axe", WeaponType.Melee, 50f, 100f), false);
+        AddItem(new WeaponItem("Pistol", WeaponType.Ranged, 25f, 80f), false);
+        AddItem(new WeaponItem("Hunting Knife", WeaponType.Melee, 20f, 60f), false);
         
-        // Add some key items
-        AddItem(new KeyItem("Cabin Key", "cabin_key_01"));
-        AddItem(new KeyItem("Map Fragment", "map_fragment_01", true));
+        // Add some key items (silent - no pickup sound)
+        AddItem(new KeyItem("Cabin Key", "cabin_key_01"), false);
+        AddItem(new KeyItem("Map Fragment", "map_fragment_01", true), false);
     }
     
     // Debug GUI
@@ -591,6 +846,12 @@ public class InventorySystem : MonoBehaviour
                 if (GUILayout.Button("Use", GUILayout.Width(50)))
                 {
                     UseItem(slot.item);
+                }
+                
+                // Drop button
+                if (GUILayout.Button("Drop", GUILayout.Width(50)))
+                {
+                    DropItem(slot.item, 1);
                 }
                 
                 // Remove button

@@ -25,11 +25,24 @@ public class Player : MonoBehaviour
     private float verticalRotation = 0f;
     private float horizontalRotation = 0f;
     
+    // Rotation locking
+    private bool wasMovementLocked = false;
+    private float lockedVerticalRotation;
+    private float lockedHorizontalRotation;
+    
+    // UI System references
+    private InventorySystem inventorySystem;
+    private CraftingSystem craftingSystem;
+    
     void Start()
     {
         // Get components
         controller = GetComponent<CharacterController>();
         playerCamera = GetComponentInChildren<Camera>();
+        
+        // Find UI systems for integration
+        inventorySystem = FindFirstObjectByType<InventorySystem>();
+        craftingSystem = FindFirstObjectByType<CraftingSystem>();
         
         // Lock cursor to center of screen
         Cursor.lockState = CursorLockMode.Locked;
@@ -78,42 +91,50 @@ public class Player : MonoBehaviour
             velocity.y = -2f; // Small downward force to keep grounded
         }
         
-        // Handle input
-        HandleMouseLook();
-        HandleMovement();
-        HandleJump();
+        // Simple check: Should player be able to move?
+        bool canMove = PlayerInputManager.CanPlayerMove();
         
-        // Apply gravity
+        // Handle cursor management
+        HandleCursorState();
+        
+        // ONLY handle input if player can move
+        if (canMove)
+        {
+            HandleMouseLook();
+            HandleMovement();
+            HandleJump();
+            wasMovementLocked = false;
+        }
+        else
+        {
+            // Lock rotation when movement is disabled
+            if (!wasMovementLocked)
+            {
+                // Store current rotation when first locking
+                lockedVerticalRotation = verticalRotation;
+                lockedHorizontalRotation = horizontalRotation;
+                wasMovementLocked = true;
+            }
+            
+            // Force rotation to stay locked
+            verticalRotation = lockedVerticalRotation;
+            horizontalRotation = lockedHorizontalRotation;
+            
+            // Apply locked rotations
+            transform.rotation = Quaternion.Euler(0f, horizontalRotation, 0f);
+            if (playerCamera != null)
+            {
+                playerCamera.transform.localRotation = Quaternion.Euler(verticalRotation, 0f, 0f);
+            }
+        }
+        
+        // Always handle gravity
         velocity.y += gravity * Time.deltaTime;
-        
-        // Move the controller
-        controller.Move(velocity * Time.deltaTime);
+        controller.Move(new Vector3(0, velocity.y, 0) * Time.deltaTime);
     }
     
     void HandleMouseLook()
     {
-        // Handle cursor lock/unlock controls
-        if (Input.GetKeyDown(KeyCode.Escape))
-        {
-            if (Cursor.lockState == CursorLockMode.Locked)
-            {
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
-            }
-            else
-            {
-                Cursor.lockState = CursorLockMode.Locked;
-                Cursor.visible = false;
-            }
-        }
-        
-        // Click to lock cursor when unlocked
-        if (Input.GetMouseButtonDown(0) && Cursor.lockState == CursorLockMode.None)
-        {
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
-        }
-        
         // Only process mouse look if cursor is locked
         if (Cursor.lockState != CursorLockMode.Locked)
             return;
@@ -133,6 +154,61 @@ public class Player : MonoBehaviour
         if (playerCamera != null)
         {
             playerCamera.transform.localRotation = Quaternion.Euler(verticalRotation, 0f, 0f);
+        }
+    }
+    
+    bool IsAnyUIOpen()
+    {
+        // Check if inventory is open
+        if (inventorySystem != null && inventorySystem.IsInventoryOpen())
+            return true;
+            
+        // Check if crafting is open
+        if (craftingSystem != null && craftingSystem.IsCraftingMenuOpen())
+            return true;
+            
+        return false;
+    }
+    
+    void HandleCursorState()
+    {
+        bool isUIOpen = IsAnyUIOpen();
+        
+        // Handle ESC key
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            if (isUIOpen)
+            {
+                // UI systems will handle closing menus
+                return;
+            }
+            else
+            {
+                // Toggle cursor lock
+                if (Cursor.lockState == CursorLockMode.Locked)
+                {
+                    Cursor.lockState = CursorLockMode.None;
+                    Cursor.visible = true;
+                }
+                else
+                {
+                    Cursor.lockState = CursorLockMode.Locked;
+                    Cursor.visible = false;
+                }
+            }
+        }
+        
+        // Auto-manage cursor for UI
+        if (isUIOpen)
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
+        else if (Cursor.lockState == CursorLockMode.None && Input.GetMouseButtonDown(0))
+        {
+            // Click to re-lock when no UI is open
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
         }
     }
     

@@ -197,6 +197,10 @@ public class Axe : MonoBehaviour
 
     void HandleInput()
     {
+        // Check if input should be disabled (UI open or cursor unlocked)
+        if (PlayerInputManager.ShouldDisableInput())
+            return;
+        
         // Only handle input when idle or blocking
         if (currentState != AxeState.Idle && currentState != AxeState.Blocking)
             return;

@@ -137,6 +137,10 @@ public class Gun : MonoBehaviour
     
     void HandleInput()
     {
+        // Check if input should be disabled (UI open or cursor unlocked)
+        if (PlayerInputManager.ShouldDisableInput())
+            return;
+        
         // Fire input
         bool firePressed = Input.GetMouseButtonDown(0);
         bool fireHeld = Input.GetMouseButton(0);

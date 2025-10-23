@@ -26,11 +26,18 @@ public class WeaponPickup : MonoBehaviour
     public bool showPickupPrompt = true;
     public string pickupPromptText = "Press E to pick up weapon";
     
+    [Header("Floor Protection")]
+    public float deleteHeightThreshold = -50f; // Delete if item falls below this Y position
+    public bool enableFloorProtection = true;
+    public LayerMask floorLayerMask = 1; // What layers count as "floor"
+    public float floorCheckDistance = 1f;
+    
     private Transform player;
     private InventorySystem playerInventory;
     private bool isInRange = false;
     private Vector3 startPosition;
     private AudioSource audioSource;
+    private Rigidbody itemRigidbody;
     
     void Start()
     {
@@ -43,7 +50,7 @@ public class WeaponPickup : MonoBehaviour
             
             if (playerInventory == null)
             {
-                playerInventory = FindObjectOfType<InventorySystem>();
+                playerInventory = FindFirstObjectByType<InventorySystem>();
             }
         }
         
@@ -57,6 +64,21 @@ public class WeaponPickup : MonoBehaviour
             audioSource = gameObject.AddComponent<AudioSource>();
         }
         
+        // Get or add Rigidbody for physics
+        itemRigidbody = GetComponent<Rigidbody>();
+        if (itemRigidbody == null)
+        {
+            itemRigidbody = gameObject.AddComponent<Rigidbody>();
+            itemRigidbody.mass = 0.5f; // Slightly heavier than resources
+        }
+        
+        // Add collider if none exists
+        if (GetComponent<Collider>() == null)
+        {
+            var collider = gameObject.AddComponent<BoxCollider>();
+            collider.size = Vector3.one * 0.7f; // Slightly larger than resources
+        }
+        
         Debug.Log($"Weapon pickup created: {weaponName}");
     }
     
@@ -65,6 +87,37 @@ public class WeaponPickup : MonoBehaviour
         HandleAnimations();
         CheckPlayerDistance();
         HandleInput();
+        CheckFloorProtection();
+    }
+    
+    void CheckFloorProtection()
+    {
+        if (!enableFloorProtection) return;
+        
+        // Check if item has fallen below deletion threshold
+        if (transform.position.y < deleteHeightThreshold)
+        {
+            Debug.Log($"Deleting {weaponName} - fell below floor threshold ({deleteHeightThreshold})");
+            Destroy(gameObject);
+            return;
+        }
+        
+        // Check if item is stuck in the floor
+        if (Physics.Raycast(transform.position, Vector3.down, out RaycastHit hit, floorCheckDistance, floorLayerMask))
+        {
+            // If we're inside the floor, move up slightly
+            if (hit.distance < 0.1f)
+            {
+                Vector3 correctedPosition = hit.point + Vector3.up * 0.3f;
+                transform.position = correctedPosition;
+                
+                // Stop downward velocity
+                if (itemRigidbody != null && itemRigidbody.linearVelocity.y < 0)
+                {
+                    itemRigidbody.linearVelocity = new Vector3(itemRigidbody.linearVelocity.x, 0, itemRigidbody.linearVelocity.z);
+                }
+            }
+        }
     }
     
     void HandleAnimations()

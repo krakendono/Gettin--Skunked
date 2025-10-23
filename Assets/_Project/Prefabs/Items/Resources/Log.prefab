@@ -50,7 +50,7 @@ ParticleSystem:
   emitterVelocityMode: 1
   looping: 0
   prewarm: 0
-  playOnAwake: 1
+  playOnAwake: 0
   useUnscaledTime: 0
   autoRandomSeed: 1
   startDelay:
@@ -4944,7 +4944,7 @@ ParticleSystem:
   emitterVelocityMode: 1
   looping: 0
   prewarm: 0
-  playOnAwake: 1
+  playOnAwake: 0
   useUnscaledTime: 0
   autoRandomSeed: 1
   startDelay:
@@ -9802,6 +9802,7 @@ GameObject:
   - component: {fileID: 4372861674720221977}
   - component: {fileID: 3184224498792025497}
   - component: {fileID: 6287995237501680952}
+  - component: {fileID: 5448678720203994937}
   m_Layer: 6
   m_Name: Log
   m_TagString: Untagged
@@ -9817,7 +9818,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 6554543952617469814}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 16.7, y: 8.027966, z: 4.2607}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -9963,3 +9964,34 @@ MonoBehaviour:
   groundLayer:
     serializedVersion: 2
     m_Bits: 16
+--- !u!114 &5448678720203994937
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6554543952617469814}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2c239a99bd5a1394f91b97738fb229a5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ResourcePickup
+  resourceName: Log
+  resourceType: 0
+  quantity: 1
+  pickupRange: 3
+  autoPickup: 0
+  manualPickupKey: 101
+  pickupEffect: {fileID: 2357869978834923131, guid: 9659aa8806a0c6e45a66d2e433495214, type: 3}
+  pickupSound: {fileID: 8300000, guid: 9019c49d069fcf8409378bc3118f09f6, type: 3}
+  destroyOnPickup: 1
+  bobSpeed: 0
+  bobHeight: 0
+  showPickupPrompt: 1
+  pickupPromptText: Press E to pick up
+  deleteHeightThreshold: -50
+  enableFloorProtection: 1
+  floorLayerMask:
+    serializedVersion: 2
+    m_Bits: 1
+  floorCheckDistance: 1
