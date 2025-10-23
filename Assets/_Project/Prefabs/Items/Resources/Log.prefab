@@ -9952,7 +9952,7 @@ MonoBehaviour:
   destroyEffect: {fileID: 5641905979116791878}
   nextStatePrefab: {fileID: 2401821047598377511, guid: cf08118dfa646ed498a798e1a915dfce, type: 3}
   spawnCount: 6
-  resourceAmount: 6
+  resourceAmount: 0
   dropPrefab: {fileID: 2401821047598377511, guid: cf08118dfa646ed498a798e1a915dfce, type: 3}
   damageReduction: 1
   enableDebugLogs: 1

@@ -204,11 +204,14 @@ public class Player : MonoBehaviour
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
         }
-        else if (Cursor.lockState == CursorLockMode.None && Input.GetMouseButtonDown(0))
+        else
         {
-            // Click to re-lock when no UI is open
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
+            // Auto-lock cursor when UI is closed (no clicking required)
+            if (Cursor.lockState == CursorLockMode.None)
+            {
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
+            }
         }
     }
     

@@ -209,9 +209,9 @@ public class InventorySystem : MonoBehaviour
     
     [Header("Item Dropping")]
     public Transform itemDropPoint; // Where to spawn dropped items
-    public float dropForce = 3f; // Force applied to dropped items
+    public float dropHorizontalForce = 3f; // Horizontal scatter force (outward spread)
+    public float dropUpwardForce = 5f; // Upward force (positive = up, negative = down)
     public float dropRadius = 1f; // Random spread radius for dropped items
-    public float dropUpwardBurst = 5f; // Upward force to prevent clipping through floor
     public bool enableItemDropping = true;
     
     [Header("Audio")]
@@ -535,18 +535,18 @@ public class InventorySystem : MonoBehaviour
             Rigidbody rb = droppedObject.GetComponent<Rigidbody>();
             if (rb != null)
             {
-                // Apply upward burst first to prevent floor clipping
-                Vector3 upwardBurst = Vector3.up * dropUpwardBurst;
-                rb.AddForce(upwardBurst, ForceMode.Impulse);
+                // Apply upward/downward force (positive = up, negative = down)
+                Vector3 verticalForce = Vector3.up * dropUpwardForce;
+                rb.AddForce(verticalForce, ForceMode.Impulse);
                 
                 // Then add horizontal spread force
                 Vector3 randomDirection = new Vector3(
                     Random.Range(-1f, 1f),
-                    0f, // No additional Y force here, we already applied upward burst
+                    0f, // No Y component here, we control Y with dropUpwardForce
                     Random.Range(-1f, 1f)
                 ).normalized;
                 
-                rb.AddForce(randomDirection * dropForce, ForceMode.Impulse);
+                rb.AddForce(randomDirection * dropHorizontalForce, ForceMode.Impulse);
             }
         }
     }

@@ -192,9 +192,13 @@ public class Wood : MonoBehaviour, IDamageable
             Rigidbody rb = nextStateObject.GetComponent<Rigidbody>();
             if (rb != null)
             {
+                // Strong upward force first
+                rb.AddForce(Vector3.up * dropForce * 1.5f, ForceMode.Impulse);
+                
+                // Then add random directional force
                 Vector3 randomDirection = new Vector3(
                     Random.Range(-1f, 1f),
-                    Random.Range(0.2f, 0.8f),
+                    Random.Range(0.8f, 1.2f), // Additional upward component
                     Random.Range(-1f, 1f)
                 ).normalized;
                 
@@ -217,12 +221,12 @@ public class Wood : MonoBehaviour, IDamageable
         // Try to find ground position
         if (Physics.Raycast(spawnPosition + Vector3.up * 5f, Vector3.down, out RaycastHit hit, 10f, groundLayer))
         {
-            spawnPosition.y = hit.point.y;
+            spawnPosition.y = hit.point.y + 0.5f; // Spawn 0.5f above ground
         }
         else
         {
-            // If no ground found, use current object's ground level
-            spawnPosition.y = transform.position.y;
+            // If no ground found, use current object's ground level + 0.5f
+            spawnPosition.y = transform.position.y + 0.5f;
         }
         
         return spawnPosition;
@@ -277,7 +281,7 @@ public class Wood : MonoBehaviour, IDamageable
     {
         // Create a simple cube as resource pickup
         GameObject pickup = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        pickup.transform.position = transform.position + Vector3.up * 0.5f;
+        pickup.transform.position = transform.position + Vector3.up * 1f; // Spawn 1f above the wood object
         pickup.transform.localScale = Vector3.one * 0.5f;
         
         // Add ResourcePickup component
@@ -293,10 +297,13 @@ public class Wood : MonoBehaviour, IDamageable
         Rigidbody pickupRb = pickup.AddComponent<Rigidbody>();
         pickupRb.mass = 0.1f;
         
-        // Add some random force
+        // Strong upward force first
+        pickupRb.AddForce(Vector3.up * dropForce * 1.5f, ForceMode.Impulse);
+        
+        // Add some random directional force
         Vector3 randomDirection = new Vector3(
             Random.Range(-1f, 1f),
-            Random.Range(0.5f, 1f),
+            Random.Range(0.8f, 1.2f), // Additional upward component
             Random.Range(-1f, 1f)
         ).normalized;
         
@@ -310,12 +317,12 @@ public class Wood : MonoBehaviour, IDamageable
     
     void SpawnResourceDrop()
     {
-        Vector3 dropPosition = transform.position + Vector3.up * 0.5f;
+        Vector3 dropPosition = transform.position + Vector3.up * 1f; // Start 1f above the wood object
         
-        // Try to find ground position
+        // Try to find ground position and add height
         if (Physics.Raycast(dropPosition, Vector3.down, out RaycastHit hit, 10f, groundLayer))
         {
-            dropPosition = hit.point + Vector3.up * 0.1f;
+            dropPosition = hit.point + Vector3.up * 0.5f; // Spawn 0.5f above ground
         }
         
         // Spawn the drop
@@ -325,9 +332,13 @@ public class Wood : MonoBehaviour, IDamageable
         Rigidbody dropRb = drop.GetComponent<Rigidbody>();
         if (dropRb != null)
         {
+            // Strong upward force first
+            dropRb.AddForce(Vector3.up * dropForce * 1.5f, ForceMode.Impulse);
+            
+            // Then add random directional force
             Vector3 randomDirection = new Vector3(
                 Random.Range(-1f, 1f),
-                Random.Range(0.5f, 1f),
+                Random.Range(0.8f, 1.2f), // Additional upward component
                 Random.Range(-1f, 1f)
             ).normalized;
             
