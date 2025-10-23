@@ -239,15 +239,72 @@ public class Wood : MonoBehaviour, IDamageable
         // Notify external systems about resource gathering
         OnResourceGathered?.Invoke(currentState, resourceAmount);
         
-        // Spawn drop prefab if assigned
+        // Try to add directly to player inventory if available
+        InventorySystem playerInventory = FindFirstObjectByType<InventorySystem>();
+        if (playerInventory != null && resourceAmount > 0)
+        {
+            // Create wood resource item
+            ResourceItem woodResource = new ResourceItem($"{stateName} Wood", ResourceType.Wood, resourceAmount);
+            
+            if (playerInventory.AddItem(woodResource))
+            {
+                if (enableDebugLogs)
+                {
+                    Debug.Log($"Added {resourceAmount}x {stateName} Wood directly to inventory");
+                }
+                return; // Successfully added to inventory, no need to spawn pickup
+            }
+        }
+        
+        // Spawn drop prefab if assigned or inventory is full
         if (dropPrefab != null)
         {
             SpawnResourceDrop();
+        }
+        else if (resourceAmount > 0)
+        {
+            // Create a basic resource pickup if no drop prefab is assigned
+            CreateResourcePickup();
         }
         
         if (enableDebugLogs)
         {
             Debug.Log($"Gathered {resourceAmount} resources from {stateName}");
+        }
+    }
+    
+    void CreateResourcePickup()
+    {
+        // Create a simple cube as resource pickup
+        GameObject pickup = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        pickup.transform.position = transform.position + Vector3.up * 0.5f;
+        pickup.transform.localScale = Vector3.one * 0.5f;
+        
+        // Add ResourcePickup component
+        ResourcePickup pickupScript = pickup.AddComponent<ResourcePickup>();
+        pickupScript.resourceName = $"{stateName} Wood";
+        pickupScript.resourceType = ResourceType.Wood;
+        pickupScript.quantity = resourceAmount;
+        
+        // Add some visual flair
+        pickup.GetComponent<Renderer>().material.color = Color.brown;
+        
+        // Add physics
+        Rigidbody pickupRb = pickup.AddComponent<Rigidbody>();
+        pickupRb.mass = 0.1f;
+        
+        // Add some random force
+        Vector3 randomDirection = new Vector3(
+            Random.Range(-1f, 1f),
+            Random.Range(0.5f, 1f),
+            Random.Range(-1f, 1f)
+        ).normalized;
+        
+        pickupRb.AddForce(randomDirection * dropForce, ForceMode.Impulse);
+        
+        if (enableDebugLogs)
+        {
+            Debug.Log($"Created resource pickup: {resourceAmount}x {stateName} Wood");
         }
     }
     
