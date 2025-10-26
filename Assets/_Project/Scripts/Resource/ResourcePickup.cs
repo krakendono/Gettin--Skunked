@@ -1,11 +1,17 @@
+using Fusion;
 using UnityEngine;
 
-public class ResourcePickup : MonoBehaviour
+public class ResourcePickup : NetworkBehaviour
 {
     [Header("Pickup Settings")]
     public string resourceName = "Wood";
     public ResourceType resourceType = ResourceType.Wood;
     public int quantity = 1;
+    // Networked replicated data used when running a session
+    [Networked] public NetworkString<_32> NetResourceName { get; set; }
+    [Networked] public ResourceType NetResourceType { get; set; }
+    [Networked] public int NetQuantity { get; set; }
+
     public float pickupRange = 3f;
     public bool autoPickup = true;
     public KeyCode manualPickupKey = KeyCode.E;
@@ -36,7 +42,7 @@ public class ResourcePickup : MonoBehaviour
     
     void Start()
     {
-        // Find player and inventory system
+        // Find player and inventory system (offline fallback)
         GameObject playerObj = GameObject.FindGameObjectWithTag("Player");
         if (playerObj != null)
         {
@@ -84,6 +90,11 @@ public class ResourcePickup : MonoBehaviour
         HandleInput();
         CheckFloorProtection();
     }
+
+    // Helpers to get current values (networked in session, local otherwise)
+    private string CurrentName => (Runner != null && Runner.IsRunning) ? NetResourceName.ToString() : resourceName;
+    private ResourceType CurrentType => (Runner != null && Runner.IsRunning) ? NetResourceType : resourceType;
+    private int CurrentQuantity => (Runner != null && Runner.IsRunning) ? NetQuantity : quantity;
     
     void CheckFloorProtection()
     {
@@ -149,25 +160,29 @@ public class ResourcePickup : MonoBehaviour
     
     void TryPickup()
     {
+        // If running in a Fusion session, request pickup via NetworkInventory RPC (server authoritative)
+        if (Runner != null && Runner.IsRunning)
+        {
+            var inv = FindLocalNetworkInventory();
+            if (inv != null)
+            {
+                inv.RPC_RequestPickup(Object.Id);
+            }
+            return;
+        }
+
+        // Offline fallback: use local InventorySystem
         if (playerInventory == null)
         {
             Debug.LogWarning("No inventory system found on player!");
             return;
         }
         
-        // Create resource item
-        ResourceItem resourceItem = new ResourceItem(resourceName, resourceType, quantity);
-        
-        // Try to add to inventory
+        ResourceItem resourceItem = new ResourceItem(CurrentName, CurrentType, CurrentQuantity);
         if (playerInventory.AddItem(resourceItem))
         {
-            // Successful pickup
-            Debug.Log($"Picked up {quantity}x {resourceName}");
-            
-            // Play effects
+            Debug.Log($"Picked up {CurrentQuantity}x {CurrentName}");
             PlayPickupEffects();
-            
-            // Destroy or hide the pickup
             if (destroyOnPickup)
             {
                 Destroy(gameObject);
@@ -180,8 +195,28 @@ public class ResourcePickup : MonoBehaviour
         else
         {
             Debug.Log("Inventory is full!");
-            // Could show UI message here
         }
+    }
+
+    private NetworkInventory FindLocalNetworkInventory()
+    {
+        // Try to get local player's NetworkInventory (InputAuthority)
+        if (Runner == null) return null;
+        foreach (var no in Runner.ActivePlayers)
+        {
+            if (Runner.TryGetPlayerObject(no, out var obj))
+            {
+                var inv = obj.GetComponent<NetworkInventory>();
+                if (inv != null && inv.Object != null && inv.Object.HasInputAuthority)
+                {
+                    return inv;
+                }
+            }
+        }
+        // Fallback: find any with input authority
+        var any = FindFirstObjectByType<NetworkInventory>();
+        if (any != null && any.Object != null && any.Object.HasInputAuthority) return any;
+        return null;
     }
     
     void PlayPickupEffects()
@@ -228,7 +263,7 @@ public class ResourcePickup : MonoBehaviour
         Vector3 labelPos = transform.position + Vector3.up * 2f;
         
         #if UNITY_EDITOR
-        UnityEditor.Handles.Label(labelPos, $"{resourceName} x{quantity}");
+        UnityEditor.Handles.Label(labelPos, $"{CurrentName} x{CurrentQuantity}");
         #endif
     }
 }

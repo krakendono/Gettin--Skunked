@@ -1,6 +1,7 @@
+using Fusion;
 using UnityEngine;
 
-public class WeaponPickup : MonoBehaviour
+public class WeaponPickup : NetworkBehaviour
 {
     [Header("Weapon Settings")]
     public string weaponName = "Battle Axe";
@@ -8,6 +9,12 @@ public class WeaponPickup : MonoBehaviour
     public float damage = 50f;
     public float maxDurability = 100f;
     public GameObject weaponPrefab;
+    
+    // Networked replicated data used when running a session
+    [Networked] public NetworkString<_32> NetWeaponName { get; set; }
+    [Networked] public WeaponType NetWeaponType { get; set; }
+    [Networked] public float NetDamage { get; set; }
+    [Networked] public float NetMaxDurability { get; set; }
     
     [Header("Pickup Settings")]
     public float pickupRange = 3f;
@@ -41,7 +48,7 @@ public class WeaponPickup : MonoBehaviour
     
     void Start()
     {
-        // Find player and inventory system
+        // Find player and inventory system (offline fallback)
         GameObject playerObj = GameObject.FindGameObjectWithTag("Player");
         if (playerObj != null)
         {
@@ -89,6 +96,11 @@ public class WeaponPickup : MonoBehaviour
         HandleInput();
         CheckFloorProtection();
     }
+
+    private string CurrentName => (Runner != null && Runner.IsRunning) ? NetWeaponName.ToString() : weaponName;
+    private WeaponType CurrentType => (Runner != null && Runner.IsRunning) ? NetWeaponType : weaponType;
+    private float CurrentDamage => (Runner != null && Runner.IsRunning) ? NetDamage : damage;
+    private float CurrentMaxDurability => (Runner != null && Runner.IsRunning) ? NetMaxDurability : maxDurability;
     
     void CheckFloorProtection()
     {
@@ -161,25 +173,29 @@ public class WeaponPickup : MonoBehaviour
     
     void TryPickup()
     {
+        // If running in a Fusion session, request pickup via NetworkInventory RPC (server authoritative)
+        if (Runner != null && Runner.IsRunning)
+        {
+            var inv = FindLocalNetworkInventory();
+            if (inv != null)
+            {
+                inv.RPC_RequestPickup(Object.Id);
+            }
+            return;
+        }
+
+        // Offline fallback: use local InventorySystem
         if (playerInventory == null)
         {
             Debug.LogWarning("No inventory system found on player!");
             return;
         }
-        
-        // Create weapon item
-        WeaponItem weaponItem = new WeaponItem(weaponName, weaponType, damage, maxDurability, weaponPrefab);
-        
-        // Try to add to inventory
+
+    WeaponItem weaponItem = new WeaponItem(CurrentName, CurrentType, CurrentDamage, CurrentMaxDurability, weaponPrefab);
         if (playerInventory.AddItem(weaponItem))
         {
-            // Successful pickup
-            Debug.Log($"Picked up weapon: {weaponName}");
-            
-            // Play effects
+            Debug.Log($"Picked up weapon: {CurrentName}");
             PlayPickupEffects();
-            
-            // Destroy or hide the pickup
             if (destroyOnPickup)
             {
                 Destroy(gameObject);
@@ -192,7 +208,6 @@ public class WeaponPickup : MonoBehaviour
         else
         {
             Debug.Log("Weapon inventory is full!");
-            // Could show UI message here
         }
     }
     
@@ -229,7 +244,7 @@ public class WeaponPickup : MonoBehaviour
             
             // Show weapon stats
             Rect statsRect = new Rect(screenPos.x - 100, Screen.height - screenPos.y - 60, 200, 30);
-            GUI.Label(statsRect, $"{weaponName} - Damage: {damage:F0}");
+            GUI.Label(statsRect, $"{CurrentName} - Damage: {CurrentDamage:F0}");
         }
     }
     
@@ -244,7 +259,26 @@ public class WeaponPickup : MonoBehaviour
         Vector3 labelPos = transform.position + Vector3.up * 2f;
         
         #if UNITY_EDITOR
-        UnityEditor.Handles.Label(labelPos, $"{weaponName}\nDmg: {damage:F0}");
+    UnityEditor.Handles.Label(labelPos, $"{CurrentName}\nDmg: {CurrentDamage:F0}");
         #endif
+    }
+
+    private NetworkInventory FindLocalNetworkInventory()
+    {
+        if (Runner == null) return null;
+        foreach (var no in Runner.ActivePlayers)
+        {
+            if (Runner.TryGetPlayerObject(no, out var obj))
+            {
+                var inv = obj.GetComponent<NetworkInventory>();
+                if (inv != null && inv.Object != null && inv.Object.HasInputAuthority)
+                {
+                    return inv;
+                }
+            }
+        }
+        var any = FindFirstObjectByType<NetworkInventory>();
+        if (any != null && any.Object != null && any.Object.HasInputAuthority) return any;
+        return null;
     }
 }

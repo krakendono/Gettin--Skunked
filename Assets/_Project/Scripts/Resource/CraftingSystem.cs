@@ -232,6 +232,28 @@ public class CraftingSystem : MonoBehaviour
             return false;
         }
         
+        // If running a Fusion session, delegate to NetworkInventory (server authoritative)
+        var runner = FindFirstObjectByType<Fusion.NetworkRunner>();
+        if (runner != null && runner.IsRunning)
+        {
+            // Find local player's network inventory
+            foreach (var p in runner.ActivePlayers)
+            {
+                if (runner.TryGetPlayerObject(p, out var obj))
+                {
+                    var netInv = obj.GetComponent<NetworkInventory>();
+                    if (netInv != null && netInv.Object != null && netInv.Object.HasInputAuthority)
+                    {
+                        netInv.RPC_RequestCraftByName(recipe.recipeName);
+                        // Optimistic success; UI will update from replicated state
+                        Debug.Log($"Requested craft (networked): {recipe.recipeName}");
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // Offline/local crafting path (original behavior)
         if (!recipe.CanCraft(playerInventory))
         {
             Debug.Log($"Cannot craft {recipe.recipeName} - missing ingredients");

@@ -1,4 +1,5 @@
 using UnityEngine;
+using Fusion;
 
 /// <summary>
 /// Main manager for the inventory and crafting systems.
@@ -237,27 +238,86 @@ public class InventoryManager : MonoBehaviour
     // Quick access methods for common items
     public void AddWood(int amount)
     {
-        AddItemToInventory(new ResourceItem("Oak Wood", ResourceType.Wood, amount));
+        // Networked path: send RPC to server, else local add
+        var netInv = FindLocalNetworkInventory();
+        if (netInv != null && netInv.Runner != null && netInv.Runner.IsRunning)
+        {
+            netInv.RPC_RequestAddResource("Oak Wood", ResourceType.Wood, amount);
+        }
+        else
+        {
+            AddItemToInventory(new ResourceItem("Oak Wood", ResourceType.Wood, amount));
+        }
     }
     
     public void AddStone(int amount)
     {
-        AddItemToInventory(new ResourceItem("Stone", ResourceType.Stone, amount));
+        var netInv = FindLocalNetworkInventory();
+        if (netInv != null && netInv.Runner != null && netInv.Runner.IsRunning)
+        {
+            netInv.RPC_RequestAddResource("Stone", ResourceType.Stone, amount);
+        }
+        else
+        {
+            AddItemToInventory(new ResourceItem("Stone", ResourceType.Stone, amount));
+        }
     }
     
     public void AddMetal(int amount)
     {
-        AddItemToInventory(new ResourceItem("Iron Ore", ResourceType.Metal, amount));
+        var netInv = FindLocalNetworkInventory();
+        if (netInv != null && netInv.Runner != null && netInv.Runner.IsRunning)
+        {
+            netInv.RPC_RequestAddResource("Iron Ore", ResourceType.Metal, amount);
+        }
+        else
+        {
+            AddItemToInventory(new ResourceItem("Iron Ore", ResourceType.Metal, amount));
+        }
     }
     
     public void GiveBasicAxe()
     {
-        AddItemToInventory(new WeaponItem("Basic Axe", WeaponType.Tool, 30f, 75f));
+        var netInv = FindLocalNetworkInventory();
+        if (netInv != null && netInv.Runner != null && netInv.Runner.IsRunning)
+        {
+            netInv.RPC_RequestAddWeapon("Basic Axe", WeaponType.Tool, 30f, 75f);
+        }
+        else
+        {
+            AddItemToInventory(new WeaponItem("Basic Axe", WeaponType.Tool, 30f, 75f));
+        }
     }
     
     public void GiveBasicGun()
     {
-        AddItemToInventory(new WeaponItem("Basic Pistol", WeaponType.Ranged, 25f, 100f));
+        var netInv = FindLocalNetworkInventory();
+        if (netInv != null && netInv.Runner != null && netInv.Runner.IsRunning)
+        {
+            netInv.RPC_RequestAddWeapon("Basic Pistol", WeaponType.Ranged, 25f, 100f);
+        }
+        else
+        {
+            AddItemToInventory(new WeaponItem("Basic Pistol", WeaponType.Ranged, 25f, 100f));
+        }
+    }
+
+    private NetworkInventory FindLocalNetworkInventory()
+    {
+        var runner = FindFirstObjectByType<NetworkRunner>();
+        if (runner == null || runner.IsRunning == false) return null;
+        foreach (var player in runner.ActivePlayers)
+        {
+            if (runner.TryGetPlayerObject(player, out var obj))
+            {
+                var inv = obj.GetComponent<NetworkInventory>();
+                if (inv != null && inv.Object != null && inv.Object.HasInputAuthority)
+                {
+                    return inv;
+                }
+            }
+        }
+        return null;
     }
     
     // Debug GUI

@@ -1,4 +1,5 @@
 using UnityEngine;
+using Fusion;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -464,6 +465,25 @@ public class InventorySystem : MonoBehaviour
     public bool DropItem(InventoryItem item, int quantity = 1)
     {
         if (item == null || !enableItemDropping) return false;
+
+        // Networked path: request server drop; do not mutate locally
+        var runner = FindFirstObjectByType<NetworkRunner>();
+        if (runner != null && runner.IsRunning)
+        {
+            foreach (var p in runner.ActivePlayers)
+            {
+                if (runner.TryGetPlayerObject(p, out var obj))
+                {
+                    var netInv = obj.GetComponent<NetworkInventory>();
+                    if (netInv != null && netInv.Object != null && netInv.Object.HasInputAuthority)
+                    {
+                        netInv.RPC_RequestDrop(item.itemName, quantity);
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
         
         // Find the item in inventory and remove it
         foreach (var slotList in new[] { resourceSlots, weaponSlots, keyItemSlots })
@@ -493,6 +513,25 @@ public class InventorySystem : MonoBehaviour
     // Drop item by name
     public bool DropItemByName(string itemName, int quantity = 1)
     {
+        // Networked path: request server drop; do not mutate locally
+        var runner = FindFirstObjectByType<NetworkRunner>();
+        if (runner != null && runner.IsRunning)
+        {
+            foreach (var p in runner.ActivePlayers)
+            {
+                if (runner.TryGetPlayerObject(p, out var obj))
+                {
+                    var netInv = obj.GetComponent<NetworkInventory>();
+                    if (netInv != null && netInv.Object != null && netInv.Object.HasInputAuthority)
+                    {
+                        netInv.RPC_RequestDrop(itemName, quantity);
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
         foreach (var slotList in new[] { resourceSlots, weaponSlots, keyItemSlots })
         {
             foreach (var slot in slotList)
@@ -760,28 +799,57 @@ public class InventorySystem : MonoBehaviour
     {
         if (!showDebugInventory || !isInventoryOpen) return;
         
-        GUI.Window(0, new Rect(50, 50, 600, 500), DrawInventoryWindow, "Inventory System");
+        GUI.Window(0, new Rect(50, 50, 650, 540), DrawInventoryWindow, "Inventory System");
     }
     
     void DrawInventoryWindow(int windowID)
     {
         scrollPosition = GUILayout.BeginScrollView(scrollPosition);
         
-        // Resources section
-        GUILayout.Label("=== RESOURCES ===", GUI.skin.box);
-        DrawItemSlots(resourceSlots, "Resource");
-        
-        GUILayout.Space(10);
-        
-        // Weapons section
-        GUILayout.Label("=== WEAPONS ===", GUI.skin.box);
-        DrawItemSlots(weaponSlots, "Weapon");
-        
-        GUILayout.Space(10);
-        
-        // Key items section
-        GUILayout.Label("=== KEY ITEMS ===", GUI.skin.box);
-        DrawItemSlots(keyItemSlots, "Key Item");
+        bool networked = false;
+        NetworkInventory netInv = null;
+        var runner = FindFirstObjectByType<NetworkRunner>();
+        if (runner != null && runner.IsRunning)
+        {
+            // Find local player's network inventory
+            foreach (var p in runner.ActivePlayers)
+            {
+                if (runner.TryGetPlayerObject(p, out var obj))
+                {
+                    var inv = obj.GetComponent<NetworkInventory>();
+                    if (inv != null && inv.Object != null && inv.Object.HasInputAuthority)
+                    {
+                        netInv = inv;
+                        networked = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (networked && netInv != null)
+        {
+            GUILayout.Label("=== NETWORK INVENTORY (READ-ONLY VIEW) ===", GUI.skin.box);
+            DrawNetworkInventory(netInv);
+            GUILayout.Space(10);
+            GUILayout.Label("Note: In networked sessions this UI is read-only in this pass.");
+        }
+        else
+        {
+            // Local inventory view & controls
+            GUILayout.Label("=== RESOURCES ===", GUI.skin.box);
+            DrawItemSlots(resourceSlots, "Resource");
+            
+            GUILayout.Space(10);
+            
+            GUILayout.Label("=== WEAPONS ===", GUI.skin.box);
+            DrawItemSlots(weaponSlots, "Weapon");
+            
+            GUILayout.Space(10);
+            
+            GUILayout.Label("=== KEY ITEMS ===", GUI.skin.box);
+            DrawItemSlots(keyItemSlots, "Key Item");
+        }
         
         GUILayout.Space(10);
         
@@ -805,12 +873,14 @@ public class InventorySystem : MonoBehaviour
         // Controls
         GUILayout.Label("=== CONTROLS ===", GUI.skin.box);
         GUILayout.Label($"Press {inventoryToggleKey} to toggle inventory");
-        GUILayout.Label("Click 'Use' to use/equip items");
+        GUILayout.Label("Click 'Use' to use/equip items (offline only in this pass)");
         
+        GUI.enabled = !networked;
         if (GUILayout.Button("Clear All"))
         {
             ClearInventory();
         }
+        GUI.enabled = true;
         
         GUILayout.EndScrollView();
         
@@ -862,6 +932,40 @@ public class InventorySystem : MonoBehaviour
                 
                 GUILayout.EndHorizontal();
             }
+        }
+    }
+
+    void DrawNetworkInventory(NetworkInventory netInv)
+    {
+        int count = netInv.GetSlotCount();
+        for (int i = 0; i < count; i++)
+        {
+            var slot = netInv.GetSlot(i);
+            if (slot.IsEmpty) continue;
+
+            GUILayout.BeginHorizontal(GUI.skin.box);
+            GUILayout.Label($"[{i:00}] {slot.Name} x{slot.Quantity}");
+
+            if (slot.ItemType == ItemType.Resource)
+            {
+                GUILayout.Label($"Type: {slot.ResourceType}");
+            }
+            else if (slot.ItemType == ItemType.Weapon)
+            {
+                GUILayout.Label($"{slot.WeaponType} Dmg: {slot.Damage:F0} Dur: {(slot.MaxDurability > 0 ? (slot.Durability/slot.MaxDurability):0f):P0}");
+            }
+            else if (slot.ItemType == ItemType.KeyItem)
+            {
+                GUILayout.Label($"Key Item");
+            }
+
+            GUILayout.FlexibleSpace();
+            GUI.enabled = false; // read-only for now in network mode
+            GUILayout.Button("Use", GUILayout.Width(50));
+            GUILayout.Button("Drop", GUILayout.Width(50));
+            GUILayout.Button("X", GUILayout.Width(25));
+            GUI.enabled = true;
+            GUILayout.EndHorizontal();
         }
     }
     
