@@ -72,6 +72,30 @@ The `Wood.cs` script has been modified to:
 3. Configure the resource type, quantity, and pickup settings
 4. The pickup will automatically integrate with the inventory
 
+#### Honey Collection (Networked)
+Use `CollectHoney` to turn a beehive (or any node) into a networked honey source with server-side validation and cooldowns.
+
+Setup (Fusion session):
+1. Create/select your Beehive GameObject in the scene
+2. Add a Collider (e.g., CapsuleCollider) and enable "Is Trigger"
+3. Add a `NetworkObject` component (scene object is fine)
+4. Add the `CollectHoney` component
+5. Assign the `Resource Pickup Prefab` field to your networked `ResourcePickup` prefab (must be in Fusion Prefab Table)
+6. Tune: Max Honey, Collect Per Use, Cooldown Seconds, Interact Range, and optional Regen
+
+How it works:
+- Local input-authority player presses E within range
+- Server validates range + cooldown, decrements hive stock, and spawns a Honey `ResourcePickup` at the player's position
+- Existing pickup logic routes Honey into `NetworkInventory`
+
+Offline fallback (no Fusion session):
+- Pressing E reduces local stock and adds Honey directly to `InventorySystem` if present, or spawns a local `ResourcePickup`
+
+Notes:
+- Ensure `ResourcePickup` prefab is configured as a Fusion `NetworkObject` and present in the Prefab Table
+- `CollectHoney` shows an in-world prompt when the local player is in range and indicates remaining stock
+- You can place multiple hives; each tracks its own stock and regen
+
 #### Adding Weapon Pickups
 1. Create a GameObject for your weapon
 2. Add the `WeaponPickup` component

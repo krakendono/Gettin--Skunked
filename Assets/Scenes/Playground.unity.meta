@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: b69d812ebe04e1648908c67abb8fa11a
+DefaultImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 286072
+  packageName: Projectiles Advanced Multiplayer - Photon Fusion
+  packageVersion: 2.0.3
+  assetPath: Assets/Scenes/Playground.unity
+  uploadId: 718776
