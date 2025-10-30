@@ -15,6 +15,7 @@ public class NetworkInventory : NetworkBehaviour
     public const int MaxSlots = 30;
     private const int MaxStackDefault = 99; // Fallback stack size for stackable items
     private const float DefaultPickupRange = 4f;
+    private const float SpamCooldownSeconds = 0.05f; // light RPC spam guard per inventory
 
     [Serializable]
     public struct InventorySlotNet : INetworkStruct
@@ -58,6 +59,10 @@ public class NetworkInventory : NetworkBehaviour
     [Networked, Capacity(MaxSlots)]
     private NetworkArray<InventorySlotNet> Slots { get; }
 
+    // Simple idempotency + rate-limiting helpers (per-inventory, input-authority client)
+    [Networked] private int LastSeqProcessed { get; set; }
+    [Networked] private TickTimer RpcSpamGuard { get; set; }
+
     [Header("Drop Spawning (Server)")]
     [SerializeField] private NetworkObject resourcePickupPrefab;
     [SerializeField] private NetworkObject weaponPickupPrefab;
@@ -70,6 +75,7 @@ public class NetworkInventory : NetworkBehaviour
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
     public void RPC_RequestPickup(NetworkId pickupObjectId)
     {
+        if (IsRpcSpam()) return;
         var pickupObj = Runner.FindObject(pickupObjectId);
         if (pickupObj == null)
             return;
@@ -109,23 +115,128 @@ public class NetworkInventory : NetworkBehaviour
         }
     }
 
+    // Move/merge/swap stacks between slots
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    public void RPC_RequestMoveStack(byte fromIndex, byte toIndex, ushort amount, int seq = 0)
+    {
+        if (IsRpcSpam()) return;
+        if (!ValidateSeq(seq)) return;
+        if (fromIndex == toIndex) return;
+        if (fromIndex >= Slots.Length || toIndex >= Slots.Length) return;
+
+        var from = Slots[fromIndex];
+        var to = Slots[toIndex];
+        if (from.IsEmpty) return;
+
+        // Non-stackable weapons and key items: only move if destination empty (or swap if dest not empty and different)
+        if (from.ItemType == ItemType.Weapon || from.ItemType == ItemType.KeyItem)
+        {
+            // swap if destination occupied and different
+            if (!to.IsEmpty)
+            {
+                // Don't merge different non-stackables; perform a swap
+                Slots.Set(fromIndex, to);
+                Slots.Set(toIndex, from);
+                return;
+            }
+            // move to empty
+            Slots.Set(toIndex, from);
+            var cleared = from; cleared.Clear();
+            Slots.Set(fromIndex, cleared);
+            return;
+        }
+
+        // Resources: attempt merge if same kind; else swap; if dest empty, move quantity
+        int moveQty = Mathf.Clamp(amount <= 0 ? from.Quantity : amount, 1, from.Quantity);
+        if (to.IsEmpty)
+        {
+            var moved = from;
+            moved.Quantity = moveQty;
+            // If moving entire stack, just move; else create a new partial stack
+            if (moveQty == from.Quantity)
+            {
+                Slots.Set(toIndex, from);
+                from.Clear();
+                Slots.Set(fromIndex, from);
+            }
+            else
+            {
+                // place a copy in destination
+                Slots.Set(toIndex, moved);
+                from.Quantity -= moveQty;
+                Slots.Set(fromIndex, from);
+            }
+            return;
+        }
+
+        // Destination occupied
+        bool sameResource = to.ItemType == ItemType.Resource &&
+                             from.ItemType == ItemType.Resource &&
+                             to.ResourceType == from.ResourceType &&
+                             to.Name.Equals(from.Name);
+        if (sameResource)
+        {
+            int space = MaxStackDefault - to.Quantity;
+            if (space <= 0) return;
+            int add = Mathf.Min(space, moveQty);
+            to.Quantity += add;
+            from.Quantity -= add;
+            Slots.Set(toIndex, to);
+            if (from.Quantity <= 0) from.Clear();
+            Slots.Set(fromIndex, from);
+            return;
+        }
+
+        // Different items: swap entire stacks
+        Slots.Set(fromIndex, to);
+        Slots.Set(toIndex, from);
+    }
+
+    // Consume from a slot (e.g., eating food, using consumable). For now only resources are consumed.
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    public void RPC_RequestUseSlot(byte slotIndex, ushort amount, int seq = 0)
+    {
+        if (IsRpcSpam()) return;
+        if (!ValidateSeq(seq)) return;
+        if (slotIndex >= Slots.Length) return;
+        var slot = Slots[slotIndex];
+        if (slot.IsEmpty) return;
+
+        switch (slot.ItemType)
+        {
+            case ItemType.Resource:
+                int take = Mathf.Clamp(amount <= 0 ? 1 : amount, 1, slot.Quantity);
+                slot.Quantity -= take;
+                if (slot.Quantity <= 0) slot.Clear();
+                Slots.Set(slotIndex, slot);
+                break;
+            case ItemType.Weapon:
+            case ItemType.KeyItem:
+                // Not consumable by default
+                break;
+        }
+    }
+
     // Optional debug RPCs to add items without world pickups (useful for dev menus)
 
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
     public void RPC_RequestAddResource(NetworkString<_32> name, ResourceType type, int quantity)
     {
+        if (IsRpcSpam()) return;
         TryAddResource(name.ToString(), type, quantity);
     }
 
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
     public void RPC_RequestAddWeapon(NetworkString<_32> name, WeaponType type, float damage, float maxDurability)
     {
+        if (IsRpcSpam()) return;
         TryAddWeapon(name.ToString(), type, damage, maxDurability);
     }
 
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
     public void RPC_RequestCraftByName(NetworkString<_32> recipeName)
     {
+        if (IsRpcSpam()) return;
         var def = CraftingDatabase.GetByName(recipeName.ToString());
         if (def == null)
             return;
@@ -158,6 +269,7 @@ public class NetworkInventory : NetworkBehaviour
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
     public void RPC_RequestDrop(NetworkString<_32> itemName, int quantity)
     {
+        if (IsRpcSpam()) return;
         if (quantity <= 0) return;
 
         // Find first slot with this name
@@ -205,6 +317,26 @@ public class NetworkInventory : NetworkBehaviour
     }
 
     // SERVER: mutate slots
+
+    // Very lightweight input throttling to keep the server safe from key-repeat spam
+    private bool IsRpcSpam()
+    {
+        if (RpcSpamGuard.ExpiredOrNotRunning(Runner))
+        {
+            RpcSpamGuard = TickTimer.CreateFromSeconds(Runner, SpamCooldownSeconds);
+            return false;
+        }
+        return true;
+    }
+
+    private bool ValidateSeq(int seq)
+    {
+        // For idempotency: ignore seq <= last processed
+        if (seq == 0) return true; // 0 means caller doesn't use seq tracking
+        if (seq <= LastSeqProcessed) return false;
+        LastSeqProcessed = seq;
+        return true;
+    }
 
     private bool TryAddResource(string name, ResourceType type, int quantity)
     {

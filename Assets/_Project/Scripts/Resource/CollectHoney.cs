@@ -32,6 +32,11 @@ public class CollectHoney : NetworkBehaviour
     [SerializeField] private KeyCode interactKey = KeyCode.E;
     [SerializeField] private bool showPrompt = true;
 
+    [Header("Bee Aggression Hook (Optional)")]
+    [Tooltip("If set, nearby BeeAggression components will be notified when honey is harvested.")]
+    [SerializeField] private bool notifyBeeAggression = true;
+    [SerializeField] private float notifyRadius = 12f;
+
     // Server-only accumulator for fractional regen
     private float _regenAccumulator;
 
@@ -140,6 +145,21 @@ public class CollectHoney : NetworkBehaviour
                 pickup.NetResourceName = honeyItemName;
                 pickup.NetResourceType = ResourceType.Honey;
                 pickup.NetQuantity = amount;
+            }
+        }
+
+        // Notify nearby bee aggression controllers (server-side hint)
+        if (notifyBeeAggression)
+        {
+            var center = transform.position;
+            var hits = Physics.OverlapSphere(center, notifyRadius);
+            foreach (var h in hits)
+            {
+                var bee = h.GetComponentInParent<BeeAggression>();
+                if (bee != null)
+                {
+                    bee.NotifyHoneyStolen(Runner.TryGetPlayerObject(player, out var pobj) ? pobj.transform : null, amount);
+                }
             }
         }
     }

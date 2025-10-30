@@ -68,6 +68,51 @@ Assets/
 - All Unity-generated files, Photon assets, and third-party packages are excluded from git
 - Make sure to keep your custom scripts and scenes in the `_Project` folder
 
+## Gameplay Systems
+
+### Honey Collection (Networked)
+- Script: `Assets/_Project/Scripts/Resource/CollectHoney.cs`
+- Server-authoritative beehive that regenerates honey over time. Players within range press E to harvest.
+- On successful harvest, the server spawns a `ResourcePickup` for Honey which flows into the inventory when picked up.
+- Optional: CollectHoney can notify nearby `BeeAggression` controllers to react to theft.
+
+Setup steps:
+- Place a `CollectHoney` on a beehive GameObject with a `NetworkObject`.
+- Assign the `resourcePickupPrefab` to a networked `ResourcePickup` prefab in the Fusion Prefab Table.
+- Adjust `maxHoney`, `collectPerUse`, `collectCooldownSeconds`, and `regenPerSecond` as desired.
+
+### Server-Authoritative Inventory
+- Script: `Assets/_Project/Scripts/Resource/NetworkInventory.cs`
+- Each player owns a networked inventory replicated as slots (server is the source of truth).
+- Clients request actions via RPC; server validates, mutates, and replicates the updated slots.
+
+Key RPCs (client → server):
+- `RPC_RequestPickup(NetworkId)`
+- `RPC_RequestAddResource(name, type, quantity)` / `RPC_RequestAddWeapon(...)`
+- `RPC_RequestDrop(name, quantity)`
+- `RPC_RequestMoveStack(from, to, amount, seq)` to move/merge/swap stacks
+- `RPC_RequestUseSlot(index, amount, seq)` to consume resources
+
+Notes:
+- Lightweight per-inventory spam guard protects against key-repeat flooding.
+- Optional `seq` parameter provides idempotency for client retries (values <= last processed are ignored).
+
+### Inventory UI (drag, drop, consume)
+- Scripts:
+   - `Assets/_Project/Scripts/UI/NetworkInventoryUI.cs`
+   - `Assets/_Project/Scripts/UI/InventorySlotUI.cs`
+- Features:
+   - Auto-finds the local player’s `NetworkInventory` (input authority) and displays a grid of slots
+   - Drag and drop between slots calls `RPC_RequestMoveStack`
+   - Right-click a slot to consume 1 via `RPC_RequestUseSlot`
+
+Setup:
+1. Create a Canvas and a Panel (empty RectTransform) for slots
+2. Add `NetworkInventoryUI` to a GameObject and assign the Panel to `slotsParent`
+3. Create a simple UI prefab for a slot (e.g., an empty GameObject with an Image + Text) and assign it to `slotPrefab`
+4. Make sure there’s an `EventSystem` in the scene (the script will auto-create one if missing)
+5. Optionally hold Shift while dropping to move a single item instead of the whole stack
+
 ## Build Instructions
 
 1. Ensure Photon Fusion is properly configured
